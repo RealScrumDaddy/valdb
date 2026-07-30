@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="ch.muhmenthaler.valdb.gui.controller.MainController"
+            prefWidth="1000" prefHeight="650">
+
+    <left>
+        <VBox fx:id="sidebar" styleClass="sidebar" prefWidth="220" spacing="8">
+            <padding>
+                <Insets top="12" right="8" bottom="12" left="8"/>
+            </padding>
+
+            <Button fx:id="collapseButton" text="&lt;&lt;" onAction="#onToggleCollapse" maxWidth="Infinity"/>
+
+            <ListView fx:id="projectList" VBox.vgrow="ALWAYS"/>
+
+            <Button fx:id="newProjectButton" text="+ New Project" onAction="#onNewProject" maxWidth="Infinity"/>
+        </VBox>
+    </left>
+
+    <center>
+        <StackPane fx:id="contentArea">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+        </StackPane>
+    </center>
+
+</BorderPane>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="ch.muhmenthaler.valdb.gui.controller.SnippetListController">
+    <top>
+        <HBox spacing="8" style="-fx-padding: 8;">
+            <Button text="Add Snippet" onAction="#onAddSnippet"/>
+            <TextField fx:id="searchField" promptText="Search..."/>
+            <Button text="Search" onAction="#onSearch"/>
+        </HBox>
+    </top>
+    <center>
+        <TableView fx:id="snippetTable">
+            <columns>
+                <TableColumn fx:id="originalColumn" text="Original" prefWidth="300"/>
+                <TableColumn fx:id="translationColumn" text="Translation" prefWidth="300"/>
+                <TableColumn fx:id="sourceColumn" text="Source" prefWidth="150"/>
+            </columns>
+        </TableView>
+    </center>
+</BorderPane>
