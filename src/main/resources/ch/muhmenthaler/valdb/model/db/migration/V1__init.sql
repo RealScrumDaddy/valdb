@@ -96,19 +96,34 @@ CREATE VIRTUAL TABLE IF NOT EXISTS snippets_fts USING fts5(
     original_content,
     translation_content,
     custom_fields_text,
-    source_fields_text
+    source_fields_text,
+    verse_text,
+    page_text,
+    chapters_text,
+    tags_text
 );
 
+-- Keep snippets_fts in sync with snippets
 CREATE TRIGGER IF NOT EXISTS snippets_ai AFTER INSERT ON snippets BEGIN
-    INSERT INTO snippets_fts(rowid, original_content, translation_content, custom_fields_text, source_fields_text)
+    INSERT INTO snippets_fts(rowid, original_content, translation_content, custom_fields_text, source_fields_text,
+                              verse_text, page_text, chapters_text, tags_text)
     VALUES (
         new.id,
         new.original_content,
         new.translation_content,
         '',
-        (SELECT s.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+        (SELECT s.title || ' ' || COALESCE(s.author, '') || ' ' || COALESCE(s.genre, '') || ' '
+                || COALESCE(group_concat(v.value, ' '), '')
          FROM sources s LEFT JOIN source_field_values v ON v.source_id = s.id
-         WHERE s.id = new.source_id)
+         WHERE s.id = new.source_id),
+        CASE
+            WHEN new.verse_start IS NULL THEN ''
+            WHEN new.verse_end IS NULL THEN CAST(new.verse_start AS TEXT)
+            ELSE CAST(new.verse_start AS TEXT) || '-' || CAST(new.verse_end AS TEXT)
+        END,
+        COALESCE(CAST(new.page AS TEXT), ''),
+        '', -- populated by snippet_chapters triggers once links are added
+        ''  -- populated by snippet_tags triggers once links are added
     );
 END;
 
@@ -117,10 +132,17 @@ UPDATE snippets_fts
 SET original_content = new.original_content,
     translation_content = new.translation_content,
     source_fields_text = (
-        SELECT s.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+        SELECT s.title || ' ' || COALESCE(s.author, '') || ' ' || COALESCE(s.genre, '') || ' '
+                   || COALESCE(group_concat(v.value, ' '), '')
         FROM sources s LEFT JOIN source_field_values v ON v.source_id = s.id
         WHERE s.id = new.source_id
-    )
+    ),
+    verse_text = CASE
+                     WHEN new.verse_start IS NULL THEN ''
+                     WHEN new.verse_end IS NULL THEN CAST(new.verse_start AS TEXT)
+                     ELSE CAST(new.verse_start AS TEXT) || '-' || CAST(new.verse_end AS TEXT)
+        END,
+    page_text = COALESCE(CAST(new.page AS TEXT), '')
 WHERE rowid = new.id;
 END;
 
@@ -128,6 +150,7 @@ CREATE TRIGGER IF NOT EXISTS snippets_ad AFTER DELETE ON snippets BEGIN
 DELETE FROM snippets_fts WHERE rowid = old.id;
 END;
 
+-- Keep custom_fields_text in sync with snippet_field_values
 CREATE TRIGGER IF NOT EXISTS snippet_field_values_ai AFTER INSERT ON snippet_field_values BEGIN
 UPDATE snippets_fts
 SET custom_fields_text = (
@@ -152,19 +175,87 @@ SET custom_fields_text = (
 WHERE rowid = old.snippet_id;
 END;
 
+-- Keep chapters_text in sync with snippet_chapters links
+CREATE TRIGGER IF NOT EXISTS snippet_chapters_ai AFTER INSERT ON snippet_chapters BEGIN
+UPDATE snippets_fts
+SET chapters_text = (
+    SELECT COALESCE(group_concat(c.title, ' '), '')
+    FROM chapters c JOIN snippet_chapters sc ON sc.chapter_id = c.id
+    WHERE sc.snippet_id = new.snippet_id
+)
+WHERE rowid = new.snippet_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS snippet_chapters_ad AFTER DELETE ON snippet_chapters BEGIN
+UPDATE snippets_fts
+SET chapters_text = (
+    SELECT COALESCE(group_concat(c.title, ' '), '')
+    FROM chapters c JOIN snippet_chapters sc ON sc.chapter_id = c.id
+    WHERE sc.snippet_id = old.snippet_id
+)
+WHERE rowid = old.snippet_id;
+END;
+
+-- Cascade a chapter rename to every snippet that references it
+CREATE TRIGGER IF NOT EXISTS chapters_au AFTER UPDATE ON chapters BEGIN
+UPDATE snippets_fts
+SET chapters_text = (
+    SELECT COALESCE(group_concat(c.title, ' '), '')
+    FROM chapters c JOIN snippet_chapters sc ON sc.chapter_id = c.id
+    WHERE sc.snippet_id = snippets_fts.rowid
+)
+WHERE rowid IN (SELECT snippet_id FROM snippet_chapters WHERE chapter_id = new.id);
+END;
+
+-- Keep tags_text in sync with snippet_tags links
+CREATE TRIGGER IF NOT EXISTS snippet_tags_ai AFTER INSERT ON snippet_tags BEGIN
+UPDATE snippets_fts
+SET tags_text = (
+    SELECT COALESCE(group_concat(t.name, ' '), '')
+    FROM tags t JOIN snippet_tags st ON st.tag_id = t.id
+    WHERE st.snippet_id = new.snippet_id
+)
+WHERE rowid = new.snippet_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS snippet_tags_ad AFTER DELETE ON snippet_tags BEGIN
+UPDATE snippets_fts
+SET tags_text = (
+    SELECT COALESCE(group_concat(t.name, ' '), '')
+    FROM tags t JOIN snippet_tags st ON st.tag_id = t.id
+    WHERE st.snippet_id = old.snippet_id
+)
+WHERE rowid = old.snippet_id;
+END;
+
+-- Cascade a tag rename to every snippet that references it
+CREATE TRIGGER IF NOT EXISTS tags_au AFTER UPDATE ON tags BEGIN
+UPDATE snippets_fts
+SET tags_text = (
+    SELECT COALESCE(group_concat(t.name, ' '), '')
+    FROM tags t JOIN snippet_tags st ON st.tag_id = t.id
+    WHERE st.snippet_id = snippets_fts.rowid
+)
+WHERE rowid IN (SELECT snippet_id FROM snippet_tags WHERE tag_id = new.id);
+END;
+
+-- Cascade source label/author/genre changes to every citing snippet
 CREATE TRIGGER IF NOT EXISTS sources_au AFTER UPDATE ON sources BEGIN
 UPDATE snippets_fts
 SET source_fields_text = (
-    SELECT new.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+    SELECT new.title || ' ' || COALESCE(new.author, '') || ' ' || COALESCE(new.genre, '') || ' '
+               || COALESCE(group_concat(v.value, ' '), '')
     FROM source_field_values v WHERE v.source_id = new.id
 )
 WHERE rowid IN (SELECT id FROM snippets WHERE source_id = new.id);
 END;
 
+-- Cascade source custom field changes to every citing snippet
 CREATE TRIGGER IF NOT EXISTS source_field_values_ai AFTER INSERT ON source_field_values BEGIN
 UPDATE snippets_fts
 SET source_fields_text = (
-    SELECT s.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+    SELECT s.title || ' ' || COALESCE(s.author, '') || ' ' || COALESCE(s.genre, '') || ' '
+               || COALESCE(group_concat(v.value, ' '), '')
     FROM sources s LEFT JOIN source_field_values v ON v.source_id = s.id
     WHERE s.id = new.source_id
 )
@@ -174,7 +265,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS source_field_values_au AFTER UPDATE ON source_field_values BEGIN
 UPDATE snippets_fts
 SET source_fields_text = (
-    SELECT s.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+    SELECT s.title || ' ' || COALESCE(s.author, '') || ' ' || COALESCE(s.genre, '') || ' '
+               || COALESCE(group_concat(v.value, ' '), '')
     FROM sources s LEFT JOIN source_field_values v ON v.source_id = s.id
     WHERE s.id = new.source_id
 )
@@ -184,7 +276,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS source_field_values_ad AFTER DELETE ON source_field_values BEGIN
 UPDATE snippets_fts
 SET source_fields_text = (
-    SELECT s.title || ' ' || COALESCE(group_concat(v.value, ' '), '')
+    SELECT s.title || ' ' || COALESCE(s.author, '') || ' ' || COALESCE(s.genre, '') || ' '
+               || COALESCE(group_concat(v.value, ' '), '')
     FROM sources s LEFT JOIN source_field_values v ON v.source_id = s.id
     WHERE s.id = old.source_id
 )

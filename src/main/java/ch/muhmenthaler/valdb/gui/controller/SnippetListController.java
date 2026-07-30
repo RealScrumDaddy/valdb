@@ -2,11 +2,13 @@ package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.gui.dialog.AddSnippetDialog;
 import ch.muhmenthaler.valdb.model.Chapter;
-import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Snippet;
+import ch.muhmenthaler.valdb.model.Source;
+import ch.muhmenthaler.valdb.model.Tag;
 import ch.muhmenthaler.valdb.repository.ChapterRepository;
 import ch.muhmenthaler.valdb.repository.SnippetRepository;
 import ch.muhmenthaler.valdb.repository.SourceRepository;
+import ch.muhmenthaler.valdb.repository.TagRepository;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -19,8 +21,10 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class SnippetListController {
 
@@ -31,17 +35,19 @@ public class SnippetListController {
     @FXML private TableColumn<Snippet, String> verseColumn;
     @FXML private TableColumn<Snippet, String> pageColumn;
     @FXML private TableColumn<Snippet, String> chapterColumn;
-    @FXML private TableColumn<Snippet, String> tagColumn;
     @FXML private TextField searchField;
 
     private final SnippetRepository snippetRepo = new SnippetRepository();
     private final SourceRepository sourceRepo = new SourceRepository();
     private final ChapterRepository chapterRepo = new ChapterRepository();
-    private Map<Integer, Chapter> chaptersById = Map.of();
-    private record LoadResult(List<Snippet> snippets, Map<Integer, Chapter> chapters) {}
+    private final TagRepository tagRepo = new TagRepository();
     private final ObservableList<Snippet> items = FXCollections.observableArrayList();
 
-    private Integer projectId; // set via setProjectId once MainController knows which project was picked
+    private Integer projectId;
+    private Map<Integer, Chapter> chaptersById = Map.of();
+    private List<Chapter> chapters = List.of();
+    private List<Tag> tags = List.of();
+    private List<Source> sources = List.of();
 
     @FXML
     public void initialize() {
@@ -54,7 +60,7 @@ public class SnippetListController {
         verseColumn.setCellValueFactory(c -> {
             var verseStart = c.getValue().verseStart();
             var verseEnd = c.getValue().verseEnd();
-            if (verseEnd != null && verseStart != null){
+            if (verseStart != null && verseEnd != null) {
                 return new SimpleStringProperty(verseStart + "-" + verseEnd);
             }
             return new SimpleStringProperty(verseStart != null ? String.valueOf(verseStart) : "");
@@ -64,15 +70,14 @@ public class SnippetListController {
             return new SimpleStringProperty(page != null ? String.valueOf(page) : "");
         });
         chapterColumn.setCellValueFactory(c -> {
-            List<Integer> chapterIds = c.getValue().chapterIds();
-            String joined = chapterIds.stream()
+            String joined = c.getValue().chapterIds().stream()
                     .map(chaptersById::get)
-                    .filter(java.util.Objects::nonNull)
+                    .filter(Objects::nonNull)
                     .map(Chapter::title)
-                    .collect(java.util.stream.Collectors.joining("; "));
+                    .collect(Collectors.joining("; "));
             return new SimpleStringProperty(joined);
         });
-        snippetTable.setItems(items); // the table just displays whatever's in this list
+        snippetTable.setItems(items);
         // No loadAll() here — we don't know which project we're showing yet.
     }
 
@@ -82,24 +87,27 @@ public class SnippetListController {
         loadAll();
     }
 
+    private record LoadResult(List<Snippet> snippets, List<Chapter> chapters, List<Tag> tags, List<Source> sources) {}
+
     private void loadAll() {
         runAsync(
                 () -> {
                     List<Snippet> snippets = snippetRepo.loadByIds(snippetRepo.filter(projectId, null, null));
-                    List<Integer> chapterIds = chapterRepo.listByProject(projectId);
-                    Map<Integer, Chapter> chapters = new HashMap<>();
-                    for (Chapter chapter : chapterRepo.loadByIds(chapterIds)) {
-                        chapters.put(chapter.id(), chapter);
-                    }
-                    return new LoadResult(snippets, chapters);
+                    List<Chapter> chapterList = chapterRepo.loadByIds(chapterRepo.listByProject(projectId));
+                    List<Tag> tagList = tagRepo.loadByIds(tagRepo.listByProject(projectId));
+                    List<Source> sourceList = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
+                    return new LoadResult(snippets, chapterList, tagList, sourceList);
                 },
                 result -> {
-                    chaptersById = result.chapters();
+                    chapters = result.chapters();
+                    tags = result.tags();
+                    sources = result.sources();
+                    chaptersById = new HashMap<>();
+                    for (Chapter chapter : chapters) chaptersById.put(chapter.id(), chapter);
                     items.setAll(result.snippets());
                 }
         );
     }
-
 
     @FXML
     private void onSearch() {
@@ -112,38 +120,65 @@ public class SnippetListController {
     }
 
     /** snippets_fts has no project column, so full-text search results need filtering after the fact. */
-    private List<Integer> filterToProject(List<Integer> searchIds) throws java.sql.SQLException {
+    private List<Integer> filterToProject(List<Integer> searchIds) throws SQLException {
         if (searchIds.isEmpty()) return searchIds;
-        List<Integer> projectIds = snippetRepo.filter(projectId, null, null);
-        return searchIds.stream().filter(projectIds::contains).toList();
+        List<Integer> projectSnippetIds = snippetRepo.filter(projectId, null, null);
+        return searchIds.stream().filter(projectSnippetIds::contains).toList();
     }
 
     @FXML
     private void onAddSnippet() {
-        AddSnippetDialog.show().ifPresent(input -> runAsync(
+        AddSnippetDialog.show(chapters, tags, sources).ifPresent(input -> runAsync(
                 () -> {
-                    Integer sourceId = null;
-                    String label = input.source();
-                    if (label != null && !label.isBlank()) {
-                        sourceId = sourceRepo.findOrCreate(projectId, label.trim());
+                    Integer sourceId = resolveSourceId(input);
+
+                    List<Integer> resolvedChapterIds = new java.util.ArrayList<>(input.chapterIds());
+                    int nextChapterSortOrder = chapters.size();
+                    for (String title : input.newChapterTitles()) {
+                        int newId = chapterRepo.insert(projectId, title, nextChapterSortOrder++);
+                        resolvedChapterIds.add(newId);
                     }
-                    int id = snippetRepo.insert(List.of(projectId), sourceId, input.original(), input.translation(),
-                            null, null, null);
-                    return snippetRepo.loadByIds(List.of(id));
+
+                    List<Integer> resolvedTagIds = new java.util.ArrayList<>(input.tagIds());
+                    for (String name : input.newTagNames()) {
+                        int newId = tagRepo.insert(projectId, name, null); // color left unset for now
+                        resolvedTagIds.add(newId);
+                    }
+
+                    int snippetId = snippetRepo.insert(
+                            List.of(projectId),
+                            sourceId,
+                            input.original(),
+                            input.translation(),
+                            input.verseStart(),
+                            input.verseEnd(),
+                            input.page()
+                    );
+
+                    for (int chapterId : resolvedChapterIds) snippetRepo.linkChapter(snippetId, chapterId);
+                    for (int tagId : resolvedTagIds) snippetRepo.linkTag(snippetId, tagId);
+
+                    return snippetId;
                 },
-                items::addAll
+                snippetId -> loadAll() // full reload picks up any newly created chapters/tags/source too
         ));
     }
 
-    private void addCustomFieldColumns(List<FieldDefinition> fieldDefs) {
-        for (FieldDefinition fieldDef : fieldDefs) {
-            TableColumn<Snippet, String> column = new TableColumn<>(fieldDef.name());
-            column.setCellValueFactory(c -> {
-                String value = c.getValue().customFields().get(fieldDef.name());
-                return new SimpleStringProperty(value != null ? value : "");
-            });
-            snippetTable.getColumns().add(column);
+    private Integer resolveSourceId(AddSnippetDialog.Input input) throws SQLException {
+        String newTitle = input.newSourceTitle();
+        if (newTitle != null && !newTitle.isBlank()) {
+            return sourceRepo.insert(
+                    List.of(projectId),
+                    newTitle.trim(),
+                    blankToNull(input.newSourceAuthor()),
+                    blankToNull(input.newSourceGenre())
+            );
         }
+        return input.existingSourceId();
+    }
+
+    private String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
