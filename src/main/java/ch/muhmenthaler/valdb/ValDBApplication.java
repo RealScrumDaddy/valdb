@@ -2,6 +2,7 @@ package ch.muhmenthaler.valdb;
 
 import ch.muhmenthaler.valdb.gui.controller.MainController;
 import ch.muhmenthaler.valdb.gui.controller.SnippetListController;
+import ch.muhmenthaler.valdb.gui.controller.SourceListController;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -17,21 +18,34 @@ public class ValDBApplication extends Application {
         Parent root = mainLoader.load();
         MainController mainController = mainLoader.getController();
 
-        mainController.setOnProjectSelected(project -> {
+        mainController.setOnViewRequested(request -> {
             try {
-                FXMLLoader snippetLoader = new FXMLLoader(ValDBApplication.class.getResource("views/TableView.fxml"));
-                Parent snippetView = snippetLoader.load();
-                SnippetListController snippetController = snippetLoader.getController();
-                snippetController.setProjectId(project.id());
-
-                mainController.getContentArea().getChildren().setAll(snippetView);
+                Parent view;
+                switch (request.viewKind()) {
+                    case SOURCES -> {
+                        FXMLLoader loader = new FXMLLoader(ValDBApplication.class.getResource("views/SourceListView.fxml"));
+                        view = loader.load();
+                        SourceListController controller = loader.getController();
+                        controller.setProjectId(request.project().id());
+                    }
+                    case SNIPPETS -> {
+                        FXMLLoader loader = new FXMLLoader(ValDBApplication.class.getResource("views/TableView.fxml"));
+                        view = loader.load();
+                        SnippetListController controller = loader.getController();
+                        controller.setProjectId(request.project().id());
+                    }
+                    default -> throw new IllegalStateException("Unhandled view kind: " + request.viewKind());
+                }
+                mainController.getContentArea().getChildren().setAll(view);
             } catch (IOException e) {
-                throw new RuntimeException("Failed to load snippet view", e);
+                throw new RuntimeException("Failed to load view", e);
             }
         });
 
         stage.setTitle("ValDB!");
-        stage.setScene(new Scene(root));
+        Scene scene = new Scene(root);
+        scene.getStylesheets().add(ValDBApplication.class.getResource("views/main.css").toExternalForm());
+        stage.setScene(scene);
         stage.show();
     }
 }

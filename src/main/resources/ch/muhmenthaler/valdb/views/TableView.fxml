@@ -15,9 +15,12 @@
     <center>
         <TableView fx:id="snippetTable">
             <columns>
-                <TableColumn fx:id="originalColumn" text="Original" prefWidth="300"/>
-                <TableColumn fx:id="translationColumn" text="Translation" prefWidth="300"/>
-                <TableColumn fx:id="sourceColumn" text="Source" prefWidth="150"/>
+                <TableColumn fx:id="verseColumn" text="Verse"/>
+                <TableColumn fx:id="pageColumn" text="Page"/>
+                <TableColumn fx:id="originalColumn" text="Original"/>
+                <TableColumn fx:id="translationColumn" text="Translation"/>
+                <TableColumn fx:id="sourceColumn" text="Source"/>
+                <TableColumn fx:id="chapterColumn" text="Chapter"/>
             </columns>
         </TableView>
     </center>

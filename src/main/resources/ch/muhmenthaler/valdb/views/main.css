@@ -1,0 +1,31 @@
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 4 0 4 0;
+}
+
+.project-card {
+    -fx-background-color: -fx-control-inner-background;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-color: derive(-fx-control-inner-background, -15%);
+    -fx-border-width: 1;
+    -fx-padding: 10 14 10 14;
+}
+
+.project-card-label {
+    -fx-font-size: 13px;
+}
+
+.list-cell:selected .project-card {
+    -fx-background-color: -fx-accent;
+    -fx-border-color: -fx-accent;
+}
+
+.list-cell:selected .project-card-label {
+    -fx-text-fill: white;
+}
+
+.list-cell:hover .project-card {
+    -fx-border-color: -fx-accent;
+}

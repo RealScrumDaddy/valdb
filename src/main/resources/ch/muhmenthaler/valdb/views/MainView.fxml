@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
@@ -21,6 +22,11 @@
             <Button fx:id="collapseButton" text="&lt;&lt;" onAction="#onToggleCollapse" maxWidth="Infinity"/>
 
             <ListView fx:id="projectList" VBox.vgrow="ALWAYS"/>
+
+            <VBox fx:id="viewSelector" spacing="4" visible="false" managed="false">
+                <ToggleButton fx:id="sourcesToggle" text="Sources" maxWidth="Infinity"/>
+                <ToggleButton fx:id="snippetsToggle" text="Snippets" maxWidth="Infinity"/>
+            </VBox>
 
             <Button fx:id="newProjectButton" text="+ New Project" onAction="#onNewProject" maxWidth="Infinity"/>
         </VBox>
