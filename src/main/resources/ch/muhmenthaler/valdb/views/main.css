@@ -17,6 +17,10 @@
     -fx-font-size: 13px;
 }
 
+.autocomplete-row:hover {
+    -fx-background-color: #d0d0d0;
+}
+
 .list-cell:selected .project-card {
     -fx-background-color: -fx-accent;
     -fx-border-color: -fx-accent;

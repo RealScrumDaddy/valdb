@@ -1,5 +1,7 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
+import ch.muhmenthaler.valdb.ValDBApplication;
+import ch.muhmenthaler.valdb.gui.input.TagField;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
 import ch.muhmenthaler.valdb.model.Chapter;
 import ch.muhmenthaler.valdb.model.Source;
@@ -11,9 +13,9 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import org.controlsfx.control.textfield.TextFields;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class AddSnippetDialog {
 
@@ -37,44 +39,27 @@ public class AddSnippetDialog {
                                        List<Source> availableSources) {
         Dialog<Input> dialog = new Dialog<>();
         dialog.setTitle("Add snippet");
+        dialog.getDialogPane().getStylesheets().add(
+                Objects.requireNonNull(AddSnippetDialog.class.getResource("/ch/muhmenthaler/valdb/views/tagfield.css")).toExternalForm()
+        );
+        dialog.getDialogPane().getStylesheets().add(
+                Objects.requireNonNull(AddSnippetDialog.class.getResource("/ch/muhmenthaler/valdb/views/main.css")).toExternalForm()
+        );
 
         TextArea originalField = new TextArea();
+        originalField.setWrapText(true);
         TextArea translationField = new TextArea();
+        translationField.setWrapText(true);
         TextField verseField = new TextField();
         verseField.setPromptText("e.g. 12 or 57-65");
         TextField pageField = new TextField();
 
-        ListView<Chapter> chapterList = new ListView<>();
-        chapterList.getItems().setAll(availableChapters);
-        chapterList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        chapterList.setCellFactory(list -> new ListCell<>() {
-            @Override protected void updateItem(Chapter chapter, boolean empty) {
-                super.updateItem(chapter, empty);
-                setText(empty || chapter == null ? null : chapter.title());
-            }
-        });
-        chapterList.setPrefHeight(100);
 
-        TextFieldWithAutoComplete newChaptersField = new TextFieldWithAutoComplete(availableChapters.stream().map(Chapter::title).toList());
-        newChaptersField.setPromptText("New chapters, comma separated");
+        TextFieldWithAutoComplete newChaptersTextField = new TextFieldWithAutoComplete(availableChapters.stream().map(Chapter::title).toList());
+        TagField chapterTagField = new TagField(newChaptersTextField, "add new Chapter");
 
-        VBox chapterBox = new VBox(4, chapterList, newChaptersField);
-
-        ListView<Tag> tagList = new ListView<>();
-        tagList.getItems().setAll(availableTags);
-        tagList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        tagList.setCellFactory(list -> new ListCell<>() {
-            @Override protected void updateItem(Tag tag, boolean empty) {
-                super.updateItem(tag, empty);
-                setText(empty || tag == null ? null : tag.name());
-            }
-        });
-        tagList.setPrefHeight(100);
-
-        TextField newTagsField = new TextField();
-        newTagsField.setPromptText("New tags, comma separated");
-
-        VBox tagBox = new VBox(4, tagList, newTagsField);
+        TextFieldWithAutoComplete newTagsTextField = new TextFieldWithAutoComplete(availableTags.stream().map(Tag::name).toList());
+        TagField tagsTagField = new TagField(newTagsTextField, "add new Tags");
 
         ComboBox<Source> existingSourceBox = new ComboBox<>();
         existingSourceBox.getItems().setAll(availableSources);
@@ -93,6 +78,7 @@ public class AddSnippetDialog {
 
         VBox newSourceBox = new VBox(4, newSourceTitleField, newSourceAuthorField, newSourceGenreField);
 
+
         GridPane grid = new GridPane();
         grid.setHgap(8);
         grid.setVgap(8);
@@ -101,8 +87,8 @@ public class AddSnippetDialog {
         grid.addRow(1, new Label("Translation:"), translationField);
         grid.addRow(2, new Label("Verse:"), verseField);
         grid.addRow(3, new Label("Page:"), pageField);
-        grid.addRow(4, new Label("Chapters:"), chapterBox);
-        grid.addRow(5, new Label("Tags:"), tagBox);
+        grid.addRow(4, new Label("Chapters:"), chapterTagField);
+        grid.addRow(5, new Label("Tags:"), tagsTagField);
         grid.addRow(6, new Label("Existing source:"), existingSourceBox);
         grid.addRow(7, new Label("Or new source:"), newSourceBox);
 
@@ -118,10 +104,13 @@ public class AddSnippetDialog {
             int[] verse = parseVerse(verseField.getText());
             Integer page = parseIntOrNull(pageField.getText());
 
-            List<Integer> chapterIds = chapterList.getSelectionModel().getSelectedItems().stream()
-                    .map(Chapter::id).toList();
-            List<Integer> tagIds = tagList.getSelectionModel().getSelectedItems().stream()
-                    .map(Tag::id).toList();
+            List<Integer> chapterIds = new ArrayList<>();
+            List<String> newChapterTitles = new ArrayList<>();
+            splitAgainstExisting(chapterTagField.getTagSet(), availableChapters, Chapter::id, Chapter::title, chapterIds, newChapterTitles);
+
+            List<Integer> tagIds = new ArrayList<>();
+            List<String> newTagNames = new ArrayList<>();
+            splitAgainstExisting(tagsTagField.getTagSet(), availableTags, Tag::id, Tag::name, tagIds, newTagNames);
 
             Source selectedExisting = existingSourceBox.getValue();
 
@@ -132,9 +121,9 @@ public class AddSnippetDialog {
                     verse[1] == -1 ? null : verse[1],
                     page,
                     chapterIds,
-                    splitAndClean(newChaptersField.getText()),
+                    newChapterTitles,
                     tagIds,
-                    splitAndClean(newTagsField.getText()),
+                    newTagNames,
                     selectedExisting != null ? selectedExisting.id() : null,
                     newSourceTitleField.getText(),
                     newSourceAuthorField.getText(),
@@ -143,6 +132,32 @@ public class AddSnippetDialog {
         });
 
         return dialog.showAndWait();
+    }
+
+    private static <T> void splitAgainstExisting(
+            List<String> entries,
+            List<T> available,
+            Function<T, Integer> idExtractor,
+            Function<T, String> nameExtractor,
+            List<Integer> outExistingIds,
+            List<String> outNewNames){
+
+        Map<String, Integer> byName = available.stream()
+                .collect(Collectors.toMap(
+                        item -> nameExtractor.apply(item).trim().toLowerCase(),
+                        idExtractor,
+                        (a, b) -> a
+                ));
+
+        for (String entry : entries){
+            String key =  entry.trim().toLowerCase();
+            Integer id = byName.get(key);
+            if (id != null){
+                outExistingIds.add(id);
+            }else{
+                outNewNames.add(entry.trim());
+            }
+        }
     }
 
     private static List<String> splitAndClean(String text) {

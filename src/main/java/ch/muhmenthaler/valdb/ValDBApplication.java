@@ -10,6 +10,7 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 import java.io.IOException;
+import java.util.Objects;
 
 public class ValDBApplication extends Application {
     @Override
@@ -44,7 +45,8 @@ public class ValDBApplication extends Application {
 
         stage.setTitle("ValDB!");
         Scene scene = new Scene(root);
-        scene.getStylesheets().add(ValDBApplication.class.getResource("views/main.css").toExternalForm());
+        scene.getStylesheets().add(Objects.requireNonNull(ValDBApplication.class.getResource("views/main.css")).toExternalForm());
+        scene.getStylesheets().add(Objects.requireNonNull(ValDBApplication.class.getResource("views/tagfield.css")).toExternalForm());
         stage.setScene(scene);
         stage.show();
     }

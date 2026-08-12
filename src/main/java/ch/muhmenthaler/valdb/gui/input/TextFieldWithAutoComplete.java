@@ -2,10 +2,8 @@ package ch.muhmenthaler.valdb.gui.input;
 
 import javafx.event.ActionEvent;
 import javafx.geometry.Side;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.CustomMenuItem;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
+import javafx.scene.layout.Region;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -30,10 +28,20 @@ public class TextFieldWithAutoComplete extends TextField {
                 this.entriesPopup.hide();
             }
         });
+        this.layoutXProperty().addListener((obs, oldX, newX) -> {
+            if (this.entriesPopup.isShowing()) {
+                this.entriesPopup.hide();
+                this.entriesPopup.show(TextFieldWithAutoComplete.this, Side.BOTTOM, 0, 0);
+            }
+        });
     }
 
     private void getAndShowRelevantEntries(){
         if (this.suppressPopupUpdate){
+            return;
+        }
+        if (!isFocused()){
+            this.entriesPopup.hide();
             return;
         }
         if (this.entries.isEmpty()){
@@ -59,11 +67,11 @@ public class TextFieldWithAutoComplete extends TextField {
     }
 
     private void populatePopup(List<String> searchResult){
-        List<CustomMenuItem> menuItems = new LinkedList<>();
+        List<MenuItem> menuItems = new LinkedList<>();
         int maxEntries = 10;
         for (int i = 0; i < Math.min(searchResult.size(), maxEntries); i++) {
             final String result = searchResult.get(i);
-            CustomMenuItem item = new CustomMenuItem(new Label(result), true);
+            MenuItem item = new MenuItem(result);
             item.setOnAction((ActionEvent e) -> {
                 this.suppressPopupUpdate = true;
                 setText(result);

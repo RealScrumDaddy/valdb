@@ -1,0 +1,35 @@
+.tag-field {
+    -fx-border-color: #aaaaaa;
+    -fx-border-radius: 4;
+    -fx-background-color: white;
+}
+
+.tag-pill {
+    -fx-background-color: #e0e8f8;
+    -fx-background-radius: 12;
+}
+
+.tag-pill:hover {
+    -fx-background-color: #cddaf5;
+}
+
+.tag-label {
+    -fx-text-fill: #333333;
+}
+
+.tag-remove-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #555555;
+    -fx-padding: 0 0 0 4;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.tag-remove-button:hover {
+    -fx-text-fill: #cc0000;
+}
+
+.tag-input {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
