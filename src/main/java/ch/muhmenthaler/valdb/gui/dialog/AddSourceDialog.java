@@ -31,9 +31,7 @@ public class AddSourceDialog {
             String title,
             String author,
             String genre,
-            /** fieldDefinitionId -> value, for fields that already existed */
             Map<Integer, String> customFieldValues,
-            /** name/value pairs typed into "+ Add custom field" that didn't match an existing field */
             List<NewCustomField> newCustomFields
     ) {}
 
@@ -42,11 +40,6 @@ public class AddSourceDialog {
     public static Optional<Input> show(List<Source> availableSources, List<FieldDefinition> sourceFieldDefinitions) {
         Dialog<Input> dialog = new Dialog<>();
         dialog.setTitle("New source");
-        // Deliberately NOT calling dialog.setResizable(true) here: Dialog defaults to non-resizable,
-        // which is what tells window managers (tiling ones especially) to treat this as a floating
-        // utility window instead of a regular tileable one. sizeToScene() below still works to grow
-        // the window to fit rows added after showAndWait() — that's a programmatic resize, which
-        // isn't gated by the resizable flag; only user drag-resizing is.
         dialog.getDialogPane().getStylesheets().add(
                 Objects.requireNonNull(AddSourceDialog.class.getResource("/ch/muhmenthaler/valdb/views/tagfield.css")).toExternalForm()
         );
