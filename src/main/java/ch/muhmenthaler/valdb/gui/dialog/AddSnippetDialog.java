@@ -1,19 +1,22 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
-import ch.muhmenthaler.valdb.ValDBApplication;
 import ch.muhmenthaler.valdb.gui.input.TagField;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
 import ch.muhmenthaler.valdb.model.Chapter;
+import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
 import ch.muhmenthaler.valdb.model.Tag;
-
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import org.controlsfx.control.textfield.TextFields;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -30,13 +33,12 @@ public class AddSnippetDialog {
             List<Integer> tagIds,
             List<String> newTagNames,
             Integer existingSourceId,
-            String newSourceTitle,
-            String newSourceAuthor,
-            String newSourceGenre
+            /** set when the "New Source" dialog was used to build a brand-new source; null otherwise */
+            AddSourceDialog.Input newSource
     ) {}
 
     public static Optional<Input> show(List<Chapter> availableChapters, List<Tag> availableTags,
-                                       List<Source> availableSources) {
+                                       List<Source> availableSources, List<FieldDefinition> sourceFieldDefinitions) {
         Dialog<Input> dialog = new Dialog<>();
         dialog.setTitle("Add snippet");
         dialog.getDialogPane().getStylesheets().add(
@@ -53,31 +55,55 @@ public class AddSnippetDialog {
         TextField verseField = new TextField();
         verseField.setPromptText("e.g. 12 or 57-65");
         TextField pageField = new TextField();
-
+        pageField.setPromptText("e.g. 12");
 
         TextFieldWithAutoComplete newChaptersTextField = new TextFieldWithAutoComplete(availableChapters.stream().map(Chapter::title).toList());
         TagField chapterTagField = new TagField(newChaptersTextField, "add new Chapter");
-
         TextFieldWithAutoComplete newTagsTextField = new TextFieldWithAutoComplete(availableTags.stream().map(Tag::name).toList());
         TagField tagsTagField = new TagField(newTagsTextField, "add new Tags");
 
-        ComboBox<Source> existingSourceBox = new ComboBox<>();
-        existingSourceBox.getItems().setAll(availableSources);
-        existingSourceBox.setPromptText("None");
-        existingSourceBox.setConverter(new javafx.util.StringConverter<>() {
-            @Override public String toString(Source source) { return source == null ? "" : source.title(); }
-            @Override public Source fromString(String string) { return null; }
+        Map<String, Integer> sourceIdsByTitleLower = availableSources.stream()
+                .collect(Collectors.toMap(
+                        s -> s.title().trim().toLowerCase(),
+                        Source::id,
+                        (a, b) -> a
+                ));
+
+        TextFieldWithAutoComplete sourceField = new TextFieldWithAutoComplete(availableSources.stream().map(Source::title).toList());
+        sourceField.setPromptText("Existing source (or blank)");
+
+        Button newSourceButton = new Button("New Source…");
+        Label sourceHintLabel = new Label();
+
+        AtomicReference<AddSourceDialog.Input> pendingNewSource = new AtomicReference<>();
+
+        newSourceButton.setOnAction(e ->
+                AddSourceDialog.show(availableSources, sourceFieldDefinitions).ifPresent(newSource -> {
+                    pendingNewSource.set(newSource);
+                    sourceField.setText(newSource.title());
+                })
+        );
+
+        sourceField.textProperty().addListener((obs, oldText, newText) -> {
+            AddSourceDialog.Input pending = pendingNewSource.get();
+            if (pending != null && !pending.title().equals(newText)) {
+                pendingNewSource.set(null);
+            }
+            sourceHintLabel.setText(pendingNewSource.get() != null ? "(new)" : "");
         });
 
-        TextField newSourceTitleField = new TextField();
-        newSourceTitleField.setPromptText("Title (leave blank to use selection above)");
-        TextField newSourceAuthorField = new TextField();
-        newSourceAuthorField.setPromptText("Author (optional)");
-        TextField newSourceGenreField = new TextField();
-        newSourceGenreField.setPromptText("Genre (optional)");
+        // Existing sources only: free text that doesn't match anything (and isn't the pending new
+        // source) is invalid — new sources must go through the "New Source" dialog.
+        BooleanBinding sourceValid = Bindings.createBooleanBinding(() -> {
+            String text = sourceField.getText();
+            if (text == null || text.isBlank()) return true;
+            AddSourceDialog.Input pending = pendingNewSource.get();
+            if (pending != null && pending.title().equals(text)) return true;
+            return sourceIdsByTitleLower.containsKey(text.trim().toLowerCase());
+        }, sourceField.textProperty());
 
-        VBox newSourceBox = new VBox(4, newSourceTitleField, newSourceAuthorField, newSourceGenreField);
-
+        HBox sourceRow = new HBox(6, sourceField, newSourceButton, sourceHintLabel);
+        sourceRow.setAlignment(Pos.CENTER_LEFT);
 
         GridPane grid = new GridPane();
         grid.setHgap(8);
@@ -89,18 +115,14 @@ public class AddSnippetDialog {
         grid.addRow(3, new Label("Page:"), pageField);
         grid.addRow(4, new Label("Chapters:"), chapterTagField);
         grid.addRow(5, new Label("Tags:"), tagsTagField);
-        grid.addRow(6, new Label("Existing source:"), existingSourceBox);
-        grid.addRow(7, new Label("Or new source:"), newSourceBox);
-
+        grid.addRow(6, new Label("Source:"), sourceRow);
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
         var okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
-        okButton.disableProperty().bind(originalField.textProperty().isEmpty());
+        okButton.disableProperty().bind(originalField.textProperty().isEmpty().or(sourceValid.not()));
 
         dialog.setResultConverter(button -> {
             if (button != ButtonType.OK) return null;
-
             int[] verse = parseVerse(verseField.getText());
             Integer page = parseIntOrNull(pageField.getText());
 
@@ -112,7 +134,17 @@ public class AddSnippetDialog {
             List<String> newTagNames = new ArrayList<>();
             splitAgainstExisting(tagsTagField.getTagSet(), availableTags, Tag::id, Tag::name, tagIds, newTagNames);
 
-            Source selectedExisting = existingSourceBox.getValue();
+            Integer existingSourceId = null;
+            AddSourceDialog.Input newSource = null;
+            String sourceText = sourceField.getText();
+            if (sourceText != null && !sourceText.isBlank()) {
+                AddSourceDialog.Input pending = pendingNewSource.get();
+                if (pending != null && pending.title().equals(sourceText)) {
+                    newSource = pending;
+                } else {
+                    existingSourceId = sourceIdsByTitleLower.get(sourceText.trim().toLowerCase());
+                }
+            }
 
             return new Input(
                     originalField.getText(),
@@ -124,13 +156,10 @@ public class AddSnippetDialog {
                     newChapterTitles,
                     tagIds,
                     newTagNames,
-                    selectedExisting != null ? selectedExisting.id() : null,
-                    newSourceTitleField.getText(),
-                    newSourceAuthorField.getText(),
-                    newSourceGenreField.getText()
+                    existingSourceId,
+                    newSource
             );
         });
-
         return dialog.showAndWait();
     }
 
@@ -141,14 +170,12 @@ public class AddSnippetDialog {
             Function<T, String> nameExtractor,
             List<Integer> outExistingIds,
             List<String> outNewNames){
-
         Map<String, Integer> byName = available.stream()
                 .collect(Collectors.toMap(
                         item -> nameExtractor.apply(item).trim().toLowerCase(),
                         idExtractor,
                         (a, b) -> a
                 ));
-
         for (String entry : entries){
             String key =  entry.trim().toLowerCase();
             Integer id = byName.get(key);
@@ -158,15 +185,6 @@ public class AddSnippetDialog {
                 outNewNames.add(entry.trim());
             }
         }
-    }
-
-    private static List<String> splitAndClean(String text) {
-        if (text == null || text.isBlank()) return List.of();
-        return Arrays.stream(text.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .distinct()
-                .toList();
     }
 
     /** Returns {start, end} using -1 as "absent". Accepts "12" or "57-65"; anything else is treated as absent. */

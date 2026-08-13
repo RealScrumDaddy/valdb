@@ -1,14 +1,9 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.gui.dialog.AddSnippetDialog;
-import ch.muhmenthaler.valdb.model.Chapter;
-import ch.muhmenthaler.valdb.model.Snippet;
-import ch.muhmenthaler.valdb.model.Source;
-import ch.muhmenthaler.valdb.model.Tag;
-import ch.muhmenthaler.valdb.repository.ChapterRepository;
-import ch.muhmenthaler.valdb.repository.SnippetRepository;
-import ch.muhmenthaler.valdb.repository.SourceRepository;
-import ch.muhmenthaler.valdb.repository.TagRepository;
+import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.model.*;
+import ch.muhmenthaler.valdb.repository.*;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -41,6 +36,7 @@ public class SnippetListController {
     private final SourceRepository sourceRepo = new SourceRepository();
     private final ChapterRepository chapterRepo = new ChapterRepository();
     private final TagRepository tagRepo = new TagRepository();
+    private final FieldDefinitionRepository sourceFieldDefinitionRepo = new FieldDefinitionRepository();
     private final ObservableList<Snippet> items = FXCollections.observableArrayList();
 
     private Integer projectId;
@@ -48,6 +44,8 @@ public class SnippetListController {
     private List<Chapter> chapters = List.of();
     private List<Tag> tags = List.of();
     private List<Source> sources = List.of();
+    private List<FieldDefinition> sourceFieldDefinitions = List.of();
+    private Map<Integer, String> sourceFieldDefinitionsById = Map.of();
 
     @FXML
     public void initialize() {
@@ -87,7 +85,7 @@ public class SnippetListController {
         loadAll();
     }
 
-    private record LoadResult(List<Snippet> snippets, List<Chapter> chapters, List<Tag> tags, List<Source> sources) {}
+    private record LoadResult(List<Snippet> snippets, List<Chapter> chapters, List<Tag> tags, List<Source> sources, List<FieldDefinition> sourceFieldDefinitions) {}
 
     private void loadAll() {
         runAsync(
@@ -96,14 +94,18 @@ public class SnippetListController {
                     List<Chapter> chapterList = chapterRepo.loadByIds(chapterRepo.listByProject(projectId));
                     List<Tag> tagList = tagRepo.loadByIds(tagRepo.listByProject(projectId));
                     List<Source> sourceList = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
-                    return new LoadResult(snippets, chapterList, tagList, sourceList);
+                    List<FieldDefinition> sourceFieldDefinitionList = sourceFieldDefinitionRepo.loadByIds(sourceFieldDefinitionRepo.listByProject(projectId, "source"));
+                    return new LoadResult(snippets, chapterList, tagList, sourceList, sourceFieldDefinitionList);
                 },
                 result -> {
                     chapters = result.chapters();
                     tags = result.tags();
                     sources = result.sources();
+                    sourceFieldDefinitions = result.sourceFieldDefinitions();
                     chaptersById = new HashMap<>();
                     for (Chapter chapter : chapters) chaptersById.put(chapter.id(), chapter);
+                    sourceFieldDefinitionsById = new HashMap<>();
+                    for (FieldDefinition sourceFieldDef : sourceFieldDefinitions) sourceFieldDefinitionsById.put(sourceFieldDef.id(), sourceFieldDef.name());
                     items.setAll(result.snippets());
                 }
         );
@@ -128,7 +130,7 @@ public class SnippetListController {
 
     @FXML
     private void onAddSnippet() {
-        AddSnippetDialog.show(chapters, tags, sources).ifPresent(input -> runAsync(
+        AddSnippetDialog.show(chapters, tags, sources, sourceFieldDefinitions).ifPresent(input -> runAsync(
                 () -> {
                     Integer sourceId = resolveSourceId(input);
 
@@ -165,20 +167,23 @@ public class SnippetListController {
     }
 
     private Integer resolveSourceId(AddSnippetDialog.Input input) throws SQLException {
-        String newTitle = input.newSourceTitle();
-        if (newTitle != null && !newTitle.isBlank()) {
-            return sourceRepo.insert(
-                    List.of(projectId),
-                    newTitle.trim(),
-                    blankToNull(input.newSourceAuthor()),
-                    blankToNull(input.newSourceGenre())
-            );
+        if (input.existingSourceId() != null) {
+            return input.existingSourceId();
         }
-        return input.existingSourceId();
-    }
-
-    private String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s.trim();
+        AddSourceDialog.Input newSource = input.newSource();
+        if (newSource == null) {
+            return null; // user left the source field blank — no source at all
+        }
+        int newSourceId = sourceRepo.insert(
+                List.of(projectId),
+                newSource.title(),
+                newSource.author(),
+                newSource.genre()
+        );
+        for (var entry : newSource.customFieldValues().entrySet()) {
+            sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
+        }
+        return newSourceId;
     }
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {

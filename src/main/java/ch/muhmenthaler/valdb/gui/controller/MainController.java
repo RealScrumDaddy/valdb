@@ -122,7 +122,7 @@ public class MainController {
                 newProjects -> {
                     items.addAll(newProjects);
                     if (!newProjects.isEmpty()) {
-                        projectList.getSelectionModel().select(newProjects.get(0));
+                        projectList.getSelectionModel().select(newProjects.getFirst());
                     }
                 }
         ));
