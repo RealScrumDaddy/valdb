@@ -167,24 +167,29 @@ public class SnippetListController {
     }
 
     private Integer resolveSourceId(AddSnippetDialog.Input input) throws SQLException {
-        if (input.existingSourceId() != null) {
-            return input.existingSourceId();
-        }
-        AddSourceDialog.Input newSource = input.newSource();
-        if (newSource == null) {
-            return null; // user left the source field blank — no source at all
-        }
-        int newSourceId = sourceRepo.insert(
-                List.of(projectId),
-                newSource.title(),
-                newSource.author(),
-                newSource.genre()
-        );
-        for (var entry : newSource.customFieldValues().entrySet()) {
-            sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
-        }
-        return newSourceId;
+    if (input.existingSourceId() != null) {
+        return input.existingSourceId();
     }
+    AddSourceDialog.Input newSource = input.newSource();
+    if (newSource == null) {
+        return null;
+    }
+    int newSourceId = sourceRepo.insert(
+            List.of(projectId),
+            newSource.title(),
+            newSource.author(),
+            newSource.genre()
+    );
+    for (var entry : newSource.customFieldValues().entrySet()) {
+        sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
+    }
+    int nextSortOrder = sourceFieldDefinitions.size();
+    for (AddSourceDialog.NewCustomField field : newSource.newCustomFields()) {
+        int fieldDefId = sourceFieldDefinitionRepo.insert(projectId, "source", field.name(), nextSortOrder++);
+        sourceRepo.setFieldValue(newSourceId, fieldDefId, field.value());
+    }
+    return newSourceId;
+}
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
         Task<T> task = new Task<>() {

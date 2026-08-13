@@ -3,7 +3,6 @@ package ch.muhmenthaler.valdb.gui.input;
 import javafx.event.ActionEvent;
 import javafx.geometry.Side;
 import javafx.scene.control.*;
-import javafx.scene.layout.Region;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -11,7 +10,6 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 public class TextFieldWithAutoComplete extends TextField {
-
     private final SortedSet<String> entries = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     private final ContextMenu entriesPopup = new ContextMenu();
     private boolean suppressPopupUpdate = false;
@@ -28,7 +26,7 @@ public class TextFieldWithAutoComplete extends TextField {
                 this.entriesPopup.hide();
             }
         });
-        this.layoutXProperty().addListener((obs, oldX, newX) -> {
+        this.localToSceneTransformProperty().addListener((obs, oldTransform, newTransform) -> {
             if (this.entriesPopup.isShowing()) {
                 this.entriesPopup.hide();
                 this.entriesPopup.show(TextFieldWithAutoComplete.this, Side.BOTTOM, 0, 0);
@@ -48,14 +46,12 @@ public class TextFieldWithAutoComplete extends TextField {
             this.entriesPopup.hide();
             return;
         }
-
         List<String> searchResult = new LinkedList<>();
         if (getText().isBlank()){
             searchResult.addAll(this.entries);
         }else{
             searchResult.addAll(this.entries.subSet(getText(), getText() + Character.MAX_VALUE));
         }
-
         if (searchResult.isEmpty()){
             this.entriesPopup.hide();
             return;

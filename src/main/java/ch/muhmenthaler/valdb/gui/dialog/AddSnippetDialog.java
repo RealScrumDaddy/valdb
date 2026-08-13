@@ -32,6 +32,7 @@ public class AddSnippetDialog {
             List<String> newChapterTitles,
             List<Integer> tagIds,
             List<String> newTagNames,
+            /** set when an existing source was picked via autocomplete; null otherwise */
             Integer existingSourceId,
             /** set when the "New Source" dialog was used to build a brand-new source; null otherwise */
             AddSourceDialog.Input newSource
@@ -62,6 +63,7 @@ public class AddSnippetDialog {
         TextFieldWithAutoComplete newTagsTextField = new TextFieldWithAutoComplete(availableTags.stream().map(Tag::name).toList());
         TagField tagsTagField = new TagField(newTagsTextField, "add new Tags");
 
+        // --- Source: pick an existing one via autocomplete, or create a brand-new one in its own dialog ---
         Map<String, Integer> sourceIdsByTitleLower = availableSources.stream()
                 .collect(Collectors.toMap(
                         s -> s.title().trim().toLowerCase(),
@@ -70,7 +72,7 @@ public class AddSnippetDialog {
                 ));
 
         TextFieldWithAutoComplete sourceField = new TextFieldWithAutoComplete(availableSources.stream().map(Source::title).toList());
-        sourceField.setPromptText("Existing source (or blank)");
+        sourceField.setPromptText("Existing source (leave blank for none)");
 
         Button newSourceButton = new Button("New Source…");
         Label sourceHintLabel = new Label();
@@ -105,6 +107,15 @@ public class AddSnippetDialog {
         HBox sourceRow = new HBox(6, sourceField, newSourceButton, sourceHintLabel);
         sourceRow.setAlignment(Pos.CENTER_LEFT);
 
+        Label sourceWarningLabel = new Label("No existing source matches this title — use \"New Source…\" to create one, or clear the field.");
+        sourceWarningLabel.setWrapText(true);
+        sourceWarningLabel.setStyle("-fx-text-fill: #b00020; -fx-font-size: 11px;");
+        sourceWarningLabel.visibleProperty().bind(sourceValid.not());
+        // managedProperty tied to visible so the row doesn't leave a blank gap when the warning is hidden
+        sourceWarningLabel.managedProperty().bind(sourceWarningLabel.visibleProperty());
+
+        VBox sourceColumnBox = new VBox(4, sourceRow, sourceWarningLabel);
+
         GridPane grid = new GridPane();
         grid.setHgap(8);
         grid.setVgap(8);
@@ -115,7 +126,7 @@ public class AddSnippetDialog {
         grid.addRow(3, new Label("Page:"), pageField);
         grid.addRow(4, new Label("Chapters:"), chapterTagField);
         grid.addRow(5, new Label("Tags:"), tagsTagField);
-        grid.addRow(6, new Label("Source:"), sourceRow);
+        grid.addRow(6, new Label("Source:"), sourceColumnBox);
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         var okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
