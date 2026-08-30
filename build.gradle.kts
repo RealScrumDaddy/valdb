@@ -59,5 +59,6 @@ jlink {
     jpackage {
         installerType = "exe"
         installerOptions = listOf("--win-menu", "--win-shortcut", "--win-dir-chooser")
+        version.toString().substringBefore("-")
     }
 }
