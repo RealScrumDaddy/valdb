@@ -57,6 +57,11 @@ jlink {
         name = "valdb"
     }
     forceMerge("sqlite-jdbc")
+    mergedModule {
+        requires("java.sql")
+        uses("java.sql.Driver")
+        provides("java.sql.Driver").with("org.sqlite.JDBC")
+    }
     jpackage {
         installerType = "exe"
         installerOptions = listOf("--win-menu", "--win-shortcut", "--win-dir-chooser", "--win-per-user-install")
