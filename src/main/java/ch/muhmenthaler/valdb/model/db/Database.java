@@ -18,6 +18,7 @@ public class Database {
     public static synchronized Connection get() {
     if (connection == null) {
         try {
+            Class.forName("org.sqlite.JDBC");
             Path dbPath = resolveDbPath();
             Files.createDirectories(dbPath.getParent());
 
@@ -26,7 +27,7 @@ public class Database {
                 st.execute("PRAGMA foreign_keys = ON");
             }
             migrate();
-        } catch (SQLException | IOException e) {
+        } catch (SQLException | IOException | ClassNotFoundException e) {
             Path dbPath = resolveDbPath();
             AppLogger.get().log(Level.SEVERE, "Failed to open database at " + dbPath, e);
             throw new RuntimeException("Failed to open database at " + dbPath, e);
