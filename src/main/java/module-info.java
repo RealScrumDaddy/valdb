@@ -1,7 +1,7 @@
 module ch.muhmenthaler.valdb {
     requires javafx.controls;
     requires javafx.fxml;
-
+    requires java.logging;
     requires org.controlsfx.controls;
     requires java.sql;
 

@@ -1,5 +1,7 @@
 package ch.muhmenthaler.valdb.model.db;
 
+import ch.muhmenthaler.valdb.business.AppLogger;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -7,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.*;
+import java.util.logging.Level;
 
 public class Database {
 
@@ -24,7 +27,9 @@ public class Database {
             }
             migrate();
         } catch (SQLException | IOException e) {
-            throw new RuntimeException("Failed to open database at " + resolveDbPath(), e);
+            Path dbPath = resolveDbPath();
+            AppLogger.get().log(Level.SEVERE, "Failed to open database at " + dbPath, e);
+            throw new RuntimeException("Failed to open database at " + dbPath, e);
         }
     }
     return connection;
