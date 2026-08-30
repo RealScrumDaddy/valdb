@@ -56,6 +56,7 @@ jlink {
     launcher {
         name = "valdb"
     }
+    forceMerge("sqlite-jdbc")
     jpackage {
         installerType = "exe"
         installerOptions = listOf("--win-menu", "--win-shortcut", "--win-dir-chooser", "--win-per-user-install")
