@@ -1,71 +1,91 @@
-name: Build Release
+name: Build native packages
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            jpackage_type: msi
+          - os: ubuntu-latest
+            platform: linux
+            jpackage_type: app-image
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Set up JDK 25 (Temurin ships jpackage + jlink)
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '25'
-          distribution: 'temurin'
 
-      - name: Build Windows installer
-        run: ./gradlew jpackage
+      - name: Linux packaging prerequisites
+        if: matrix.platform == 'linux'
+        run: |
+          chmod +x gradlew
+
+      # windows-latest bundles WiX Toolset 3.14.x, which is the version
+      # jpackage's msi/exe bundler actually works with today -- WiX 5/6 are
+      # still broken with jpackage as of JDK 25 (see JDK-8356592). Don't add
+      # a `dotnet tool install wix` step here, it would pull WiX 5/6 and
+      # break the build.
+
+      - name: Build fat jar (this OS's JavaFX natives get baked in)
+        run: ./gradlew customFatJar --no-daemon
         shell: bash
 
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-exe
-          path: build/jpackage/*.exe
-
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          java-version: '25'
-          distribution: 'temurin'
-
-      - name: Build runtime image
-        run: ./gradlew jlink
-
-      - name: Package as tarball
+      - name: Resolve app version
+        id: appver
         run: |
-          cd build/image
-          tar -czf ../../valdb-linux-x64.tar.gz .
+          VERSION=$(./gradlew -q printAppVersion --no-daemon)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        shell: bash
 
-      - name: Upload Linux artifact
+      - name: Stage jar for jpackage
+        run: |
+          mkdir -p dist-input
+          cp build/libs/ValDB.jar dist-input/
+        shell: bash
+
+      - name: jpackage (Windows -> msi)
+        if: matrix.platform == 'windows'
+        run: >
+          jpackage
+          --input dist-input
+          --dest dist
+          --name ValDB
+          --app-version ${{ steps.appver.outputs.version }}
+          --main-jar ValDB.jar
+          --main-class ch.muhmenthaler.valdb.Launcher
+          --type msi
+          --win-dir-chooser
+          --win-menu
+          --win-shortcut
+
+      - name: jpackage (Linux -> app-image)
+        if: matrix.platform == 'linux'
+        run: >
+          jpackage
+          --input dist-input
+          --dest dist
+          --name ValDB
+          --app-version ${{ steps.appver.outputs.version }}
+          --main-jar ValDB.jar
+          --main-class ch.muhmenthaler.valdb.Launcher
+          --type app-image
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-tarball
-          path: valdb-linux-x64.tar.gz
-
-  release:
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            windows-exe/*.exe
-            linux-tarball/*.tar.gz
+          name: ValDB-${{ matrix.platform }}
+          path: dist/*

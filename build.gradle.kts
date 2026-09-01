@@ -1,9 +1,6 @@
 plugins {
-    java
     application
-    id("org.javamodularity.moduleplugin") version "2.0.1"
     id("org.openjfx.javafxplugin") version "0.1.0"
-    id("org.beryx.jlink") version "4.1.1"
 }
 
 group = "ch.muhmenthaler.valdb"
@@ -26,47 +23,47 @@ tasks.withType<JavaCompile> {
 }
 
 application {
-    mainModule.set("ch.muhmenthaler.valdb")
-    mainClass.set("ch.muhmenthaler.valdb.ValDBApplication")
+    mainClass.set("ch.muhmenthaler.valdb.Launcher")
 }
 
 javafx {
     version = "25.0.3"
     modules = listOf("javafx.controls", "javafx.fxml")
+    // No 'platform' set on purpose: the plugin auto-detects the OS Gradle
+    // is running on and pulls the matching native jars (win / linux / mac).
+    // That's exactly why the fat jar below must be built separately on
+    // each CI runner rather than once and reused.
 }
 
 dependencies {
     implementation("org.controlsfx:controlsfx:11.2.3")
     implementation("org.xerial:sqlite-jdbc:3.53.2.0")
-    compileOnly("org.slf4j:slf4j-api:1.7.36")
-    compileOnly("org.graalvm.sdk:nativeimage:25.0.3")
     testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
 }
 
-tasks.named<JavaExec>("run") {
-    jvmArgs = listOf("--enable-native-access=javafx.graphics")
+// --- Fat jar for jpackage -------------------------------------------------
+tasks.register<Jar>("customFatJar") {
+    group = "distribution"
+    description = "Assembles an uber-jar (app + all runtime deps) for jpackage."
+
+    manifest {
+        attributes["Main-Class"] = application.mainClass.get()
+    }
+
+    archiveFileName.set("ValDB.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class")
+    with(tasks.jar.get() as CopySpec)
 }
 
-tasks.withType<Test> {
-    useJUnitPlatform()
+tasks.named("build") {
+    dependsOn("customFatJar")
 }
 
-jlink {
-    imageZip.set(layout.buildDirectory.file("/distributions/app-${javafx.platform.classifier}.zip"))
-    options.set(listOf("--strip-debug", "--compress", "zip-6", "--no-header-files", "--no-man-pages", "--bind-services"))
-    launcher {
-        name = "valdb"
-    }
-    forceMerge("sqlite-jdbc")
-    mergedModule {
-        requires("java.sql")
-        uses("java.sql.Driver")
-        provides("java.sql.Driver").with("org.sqlite.JDBC")
-    }
-    jpackage {
-        installerType = "exe"
-        installerOptions = listOf("--win-menu", "--win-shortcut", "--win-dir-chooser", "--win-per-user-install")
-        appVersion = version.toString().substringBefore("-")
+tasks.register("printAppVersion") {
+    doLast {
+        println(version.toString().substringBefore("-"))
     }
 }
