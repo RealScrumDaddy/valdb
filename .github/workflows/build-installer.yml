@@ -26,11 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (Temurin ships jpackage + jlink)
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Linux packaging prerequisites
         if: matrix.platform == 'linux'
@@ -43,7 +46,7 @@ jobs:
       # a `dotnet tool install wix` step here, it would pull WiX 5/6 and
       # break the build.
 
-      - name: Build fat jar (this OS's JavaFX natives get baked in)
+      - name: Build fat jar
         run: ./gradlew customFatJar --no-daemon
         shell: bash
 
