@@ -5,6 +5,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   package:
     strategy:
@@ -84,8 +87,24 @@ jobs:
           --main-class ch.muhmenthaler.valdb.Launcher
           --type app-image
 
-      - name: Upload artifact
+      - name: Package Linux app-image for distribution
+        if: matrix.platform == 'linux'
+        run: |
+          cd dist
+          zip -r ValDB-linux.zip ValDB
+          rm -rf ValDB
+        shell: bash
+
+      - name: Upload workflow-run artifact
         uses: actions/upload-artifact@v4
         with:
           name: ValDB-${{ matrix.platform }}
           path: dist/*
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
