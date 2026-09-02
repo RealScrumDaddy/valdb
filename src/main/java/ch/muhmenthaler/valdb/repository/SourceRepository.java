@@ -1,5 +1,6 @@
 package ch.muhmenthaler.valdb.repository;
 
+import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.Source;
 import ch.muhmenthaler.valdb.model.db.Database;
 
@@ -128,23 +129,34 @@ public class SourceRepository {
         }
     }
 
-    public Map<String, String> getFieldValues(int sourceId) throws SQLException {
-        String sql = """
-            SELECT fd.name, v.value
-            FROM source_field_values v
-            JOIN field_definitions fd ON fd.id = v.field_definition_id
-            WHERE v.source_id = ?
-            ORDER BY fd.sort_order
-            """;
-        try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
-            ps.setInt(1, sourceId);
+    private Map<Integer, List<CustomFieldValue>> loadFieldValues(List<Integer> ids) throws SQLException {
+        if (ids.isEmpty()) return Map.of();
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        Map<Integer, List<CustomFieldValue>> fieldsBySource = new HashMap<>();
+        for (Integer id : ids) fieldsBySource.put(id, new ArrayList<>());
+        String fieldSql = "SELECT fd.id, v.source_id, fd.name, v.value FROM source_field_values v " +
+                "JOIN field_definitions fd ON fd.id = v.field_definition_id " +
+                "WHERE v.source_id IN (" + placeholders + ") ORDER BY fd.sort_order";
+        try (PreparedStatement ps = Database.get().prepareStatement(fieldSql)) {
+            for (int i = 0; i < ids.size(); i++) ps.setInt(i + 1, ids.get(i));
             try (ResultSet rs = ps.executeQuery()) {
-                Map<String, String> values = new LinkedHashMap<>();
-                while (rs.next()) values.put(rs.getString(1), rs.getString(2));
-                return values;
+                while (rs.next()) {
+                    fieldsBySource.get(rs.getInt("source_id"))
+                            .add(new CustomFieldValue(
+                                    rs.getInt("id"),
+                                    rs.getString("name"),
+                                    rs.getString("value")
+                            ));
+                }
             }
         }
+        return fieldsBySource;
     }
+
+    public List<CustomFieldValue> getFieldValues(int sourceId) throws SQLException {
+        return loadFieldValues(List.of(sourceId)).getOrDefault(sourceId, List.of());
+    }
+
 
     public List<Integer> listByProject(int projectId) throws SQLException {
         String sql = "SELECT s.id FROM sources s " +
@@ -199,21 +211,7 @@ public class SourceRepository {
             }
         }
 
-        Map<Integer, Map<String, String>> fieldsBySource = new HashMap<>();
-        for (Integer id : titles.keySet()) fieldsBySource.put(id, new LinkedHashMap<>());
-
-        String fieldSql = "SELECT v.source_id, fd.name, v.value FROM source_field_values v " +
-                "JOIN field_definitions fd ON fd.id = v.field_definition_id " +
-                "WHERE v.source_id IN (" + placeholders + ") ORDER BY fd.sort_order";
-        try (PreparedStatement ps = Database.get().prepareStatement(fieldSql)) {
-            for (int i = 0; i < ids.size(); i++) ps.setInt(i + 1, ids.get(i));
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    fieldsBySource.get(rs.getInt("source_id"))
-                            .put(rs.getString("name"), rs.getString("value"));
-                }
-            }
-        }
+        Map<Integer, List<CustomFieldValue>> fieldsBySource = loadFieldValues(ids);
 
         List<Source> sources = new ArrayList<>();
         for (var entry : titles.entrySet()) {

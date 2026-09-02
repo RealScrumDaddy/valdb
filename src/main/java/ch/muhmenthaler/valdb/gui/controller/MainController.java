@@ -1,5 +1,6 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
+import ch.muhmenthaler.valdb.business.AppLogger;
 import ch.muhmenthaler.valdb.gui.dialog.NewProjectDialog;
 import ch.muhmenthaler.valdb.model.Project;
 import ch.muhmenthaler.valdb.repository.ProjectRepository;
@@ -19,6 +20,7 @@ import javafx.util.Duration;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 
 public class MainController {
 
@@ -153,7 +155,7 @@ public class MainController {
         };
         task.setOnSucceeded(e -> onSuccess.accept(task.getValue()));
         task.setOnFailed(e -> {
-            task.getException().printStackTrace();
+            AppLogger.get().log(Level.SEVERE, task.getException().getMessage());
             new Alert(Alert.AlertType.ERROR, "Database error: " + task.getException().getMessage()).showAndWait();
         });
         new Thread(task).start();

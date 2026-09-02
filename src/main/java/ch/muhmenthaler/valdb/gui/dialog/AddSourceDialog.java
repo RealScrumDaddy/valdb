@@ -1,6 +1,7 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
+import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
 import javafx.application.Platform;
@@ -69,7 +70,9 @@ public class AddSourceDialog {
         int row = 3;
         for (FieldDefinition def : sourceFieldDefinitions) {
             List<String> suggestions = availableSources.stream()
-                    .map(s -> s.customFields().get(def.name()))
+                    .flatMap(s -> s.customFields().stream())
+                    .filter(cf -> cf.fieldDefinitionId() == def.id())
+                    .map(CustomFieldValue::value)
                     .filter(Objects::nonNull)
                     .map(String::trim)
                     .filter(v -> !v.isBlank())
@@ -82,7 +85,6 @@ public class AddSourceDialog {
             grid.addRow(row++, new Label(def.name() + ":"), valueField);
         }
 
-        // --- New custom fields: user-added name/value rows, name autocompletes against existing field names ---
         List<String> existingFieldNames = sourceFieldDefinitions.stream().map(FieldDefinition::name).toList();
         List<CustomFieldRow> newFieldRows = new ArrayList<>();
         VBox newFieldsContainer = new VBox(4);

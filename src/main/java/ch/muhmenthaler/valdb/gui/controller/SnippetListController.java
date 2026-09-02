@@ -162,7 +162,7 @@ public class SnippetListController {
 
                     return snippetId;
                 },
-                snippetId -> loadAll() // full reload picks up any newly created chapters/tags/source too
+                snippetId -> loadAll()
         ));
     }
 
