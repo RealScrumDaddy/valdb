@@ -90,6 +90,21 @@ public class SnippetRepository {
         }
     }
 
+    /** Distinct ids of sources with at least one snippet linked to the given chapter. */
+    public List<Integer> listSourceIdsByChapter(int chapterId) throws SQLException {
+        String sql = "SELECT DISTINCT s.source_id FROM snippets s " +
+                "JOIN snippet_chapters sc ON sc.snippet_id = s.id " +
+                "WHERE sc.chapter_id = ? AND s.source_id IS NOT NULL";
+        try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
+            ps.setInt(1, chapterId);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Integer> ids = new ArrayList<>();
+                while (rs.next()) ids.add(rs.getInt(1));
+                return ids;
+            }
+        }
+    }
+
     public void setFieldValue(int snippetId, int fieldDefinitionId, String value) throws SQLException {
         String sql = """
             INSERT INTO snippet_field_values (snippet_id, field_definition_id, value)

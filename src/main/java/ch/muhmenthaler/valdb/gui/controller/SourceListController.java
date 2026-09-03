@@ -1,8 +1,10 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
+import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
 import ch.muhmenthaler.valdb.model.tree.*;
+import ch.muhmenthaler.valdb.repository.FieldDefinitionRepository;
 import ch.muhmenthaler.valdb.repository.SourceRepository;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
@@ -13,11 +15,15 @@ import javafx.scene.control.TreeView;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class SourceListController {
     @FXML private TreeView<SourceTreeNode> sourceTree;
     private final SourceRepository sourceRepo = new SourceRepository();
+    private final FieldDefinitionRepository fieldDefinitionRepo = new FieldDefinitionRepository();
     private Integer projectId;
+
+    private record LoadResult(List<Source> sources, List<FieldDefinition> fieldDefinitions) {}
 
     @FXML
     public void initialize() {
@@ -32,12 +38,19 @@ public class SourceListController {
 
     private void loadAll() {
         runAsync(
-                () -> sourceRepo.loadByIds(sourceRepo.listByProject(projectId)),
-                this::populateTree
+                () -> {
+                    List<Source> sources = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
+                    List<FieldDefinition> fieldDefinitions = fieldDefinitionRepo.loadByIds(
+                            fieldDefinitionRepo.listByProject(projectId, "source"));
+                    return new LoadResult(sources, fieldDefinitions);
+                },
+                result -> populateTree(result.sources(), result.fieldDefinitions())
         );
     }
 
-    private void populateTree(List<Source> sources) {
+    private void populateTree(List<Source> sources, List<FieldDefinition> fieldDefinitions) {
+        Map<String, Boolean> expansionState = captureExpansionState();
+
         Map<String, List<Source>> byAuthor = new TreeMap<>();
         for (Source source : sources) {
             String author = (source.author() == null || source.author().isBlank())
@@ -47,24 +60,55 @@ public class SourceListController {
         TreeItem<SourceTreeNode> root = new TreeItem<>(new AuthorNode("Sources"));
         for (var entry : byAuthor.entrySet()) {
             TreeItem<SourceTreeNode> authorItem = new TreeItem<>(new AuthorNode(entry.getKey()));
+            authorItem.setExpanded(expansionState.getOrDefault(getExpansionKey(authorItem.getValue()), true));
             authorItem.setExpanded(true);
             entry.getValue().stream()
                     .sorted(Comparator.comparing(Source::title))
-                    .forEach(source -> authorItem.getChildren().add(buildTitleItem(source)));
+                    .forEach(source -> authorItem.getChildren().add(buildTitleItem(source, fieldDefinitions, expansionState)));
             root.getChildren().add(authorItem);
         }
         sourceTree.setRoot(root);
     }
 
-    private TreeItem<SourceTreeNode> buildTitleItem(Source source) {
+    private TreeItem<SourceTreeNode> buildTitleItem(Source source, List<FieldDefinition> fieldDefinitions, Map<String, Boolean> expansionState) {
         TreeItem<SourceTreeNode> titleItem = new TreeItem<>(new TitleNode(source));
-        if (source.genre() != null && !source.genre().isBlank()) {
-            titleItem.getChildren().add(new TreeItem<>(new GenreNode(source)));
-        }
-        for (CustomFieldValue field : source.customFields()) {
-            titleItem.getChildren().add(new TreeItem<>(new CustomFieldNode(source, field)));
+        titleItem.getChildren().add(new TreeItem<>(new GenreNode(source)));
+        titleItem.setExpanded(expansionState.getOrDefault(getExpansionKey(titleItem.getValue()), false));
+
+        Map<Integer, CustomFieldValue> valuesByDefinitionId = source.customFields().stream().collect(
+                Collectors.toMap(CustomFieldValue::fieldDefinitionId, v -> v));
+
+        for (FieldDefinition fieldDefinition : fieldDefinitions){
+            CustomFieldValue fieldValue = valuesByDefinitionId.getOrDefault(
+                    fieldDefinition.id(),
+                    new CustomFieldValue(fieldDefinition.id(), fieldDefinition.name(), null)
+            );
+            titleItem.getChildren().add(new TreeItem<>(new CustomFieldNode(source, fieldValue)));
         }
         return titleItem;
+    }
+
+    private String getExpansionKey(SourceTreeNode node){
+        return switch (node){
+            case AuthorNode a -> "author:" + a.authorName();
+            case TitleNode t -> "title:" + t.source().id();
+            default -> null;
+        };
+    }
+
+    private Map<String, Boolean> captureExpansionState(){
+        Map<String, Boolean> expansionState = new HashMap<>();
+        collectExpansionState(this.sourceTree.getRoot(), expansionState);
+        return expansionState;
+    }
+
+    private void collectExpansionState(TreeItem<SourceTreeNode> tree, Map<String, Boolean> expansionState){
+        if (tree == null) return;
+        String key = getExpansionKey(tree.getValue());
+        if (key != null) expansionState.put(key, tree.isExpanded());
+        for (TreeItem<SourceTreeNode> child : tree.getChildren()){
+            collectExpansionState(child, expansionState);
+        }
     }
 
     private void persistEdit(SourceTreeNode newValue) {
