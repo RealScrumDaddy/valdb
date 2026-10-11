@@ -2,11 +2,16 @@
     -fx-border-color: #aaaaaa;
     -fx-border-radius: 4;
     -fx-background-color: white;
+    -fx-padding: 0.45em;
+    -fx-hgap: 0.45em;
+    -fx-vgap: 0.45em;
 }
 
 .tag-pill {
     -fx-background-color: #e0e8f8;
-    -fx-background-radius: 12;
+    -fx-padding: 0.3em 0.6em;
+    -fx-spacing: 0.3em;
+    -fx-background-radius: 999;
 }
 
 .tag-pill:hover {
@@ -20,7 +25,7 @@
 .tag-remove-button {
     -fx-background-color: transparent;
     -fx-text-fill: #555555;
-    -fx-padding: 0 0 0 4;
+    -fx-padding: 0 0 0 0.3em;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }

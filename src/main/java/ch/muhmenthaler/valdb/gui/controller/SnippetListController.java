@@ -2,10 +2,13 @@ package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.gui.dialog.AddSnippetDialog;
 import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.gui.input.ChapterFilterBinding;
 import ch.muhmenthaler.valdb.model.*;
 import ch.muhmenthaler.valdb.repository.*;
+import ch.muhmenthaler.valdb.gui.input.TagPillCell;
 
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -30,7 +33,9 @@ public class SnippetListController {
     @FXML private TableColumn<Snippet, String> verseColumn;
     @FXML private TableColumn<Snippet, String> pageColumn;
     @FXML private TableColumn<Snippet, String> chapterColumn;
+    @FXML private TableColumn<Snippet, List<Tag>> tagsColumn;
     @FXML private TextField searchField;
+    @FXML private ComboBox<Chapter> chapterFilter;
 
     private final SnippetRepository snippetRepo = new SnippetRepository();
     private final SourceRepository sourceRepo = new SourceRepository();
@@ -40,12 +45,14 @@ public class SnippetListController {
     private final ObservableList<Snippet> items = FXCollections.observableArrayList();
 
     private Integer projectId;
+    private ChapterFilterBinding chapterFilterBinding;
     private Map<Integer, Chapter> chaptersById = Map.of();
     private List<Chapter> chapters = List.of();
     private List<Tag> tags = List.of();
     private List<Source> sources = List.of();
     private List<FieldDefinition> sourceFieldDefinitions = List.of();
     private Map<Integer, String> sourceFieldDefinitionsById = Map.of();
+    private Map<Integer, Tag> tagsById = Map.of();
 
     @FXML
     public void initialize() {
@@ -75,22 +82,35 @@ public class SnippetListController {
                     .collect(Collectors.joining("; "));
             return new SimpleStringProperty(joined);
         });
+        tagsColumn.setCellValueFactory(c -> new SimpleObjectProperty<>(
+                c.getValue().tagIds().stream()
+                        .map(tagsById::get)
+                        .filter(Objects::nonNull)
+                        .toList()));
+        tagsColumn.setCellFactory(col -> new TagPillCell<>());
         snippetTable.setItems(items);
-        // No loadAll() here — we don't know which project we're showing yet.
+        chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::loadAll);
     }
 
     /** Must be called once, right after this controller is loaded, before any data can show. */
     public void setProjectId(int projectId) {
         this.projectId = projectId;
-        loadAll();
+        runAsync(
+                () -> this.chapterRepo.loadByIds(this.chapterRepo.listByProject(projectId)),
+                chapters -> {
+                    chapterFilterBinding.setChapters(chapters);
+                    loadAll();
+        });
     }
 
     private record LoadResult(List<Snippet> snippets, List<Chapter> chapters, List<Tag> tags, List<Source> sources, List<FieldDefinition> sourceFieldDefinitions) {}
 
     private void loadAll() {
+        Chapter selectedChapter = this.chapterFilterBinding.getSelectedChapter();
+        Integer selectedChapterId = selectedChapter == null ? null : selectedChapter.id();
         runAsync(
                 () -> {
-                    List<Snippet> snippets = snippetRepo.loadByIds(snippetRepo.filter(projectId, null, null));
+                    List<Snippet> snippets = snippetRepo.loadByIds(snippetRepo.filter(projectId, selectedChapterId, null));
                     List<Chapter> chapterList = chapterRepo.loadByIds(chapterRepo.listByProject(projectId));
                     List<Tag> tagList = tagRepo.loadByIds(tagRepo.listByProject(projectId));
                     List<Source> sourceList = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
@@ -106,6 +126,8 @@ public class SnippetListController {
                     for (Chapter chapter : chapters) chaptersById.put(chapter.id(), chapter);
                     sourceFieldDefinitionsById = new HashMap<>();
                     for (FieldDefinition sourceFieldDef : sourceFieldDefinitions) sourceFieldDefinitionsById.put(sourceFieldDef.id(), sourceFieldDef.name());
+                    tagsById = new HashMap<>();
+                    for (Tag tag : tags) tagsById.put(tag.id(), tag);
                     items.setAll(result.snippets());
                 }
         );
@@ -167,29 +189,29 @@ public class SnippetListController {
     }
 
     private Integer resolveSourceId(AddSnippetDialog.Input input) throws SQLException {
-    if (input.existingSourceId() != null) {
-        return input.existingSourceId();
+        if (input.existingSourceId() != null) {
+            return input.existingSourceId();
+        }
+        AddSourceDialog.Input newSource = input.newSource();
+        if (newSource == null) {
+            return null;
+        }
+        int newSourceId = sourceRepo.insert(
+                List.of(projectId),
+                newSource.title(),
+                newSource.author(),
+                newSource.genre()
+        );
+        for (var entry : newSource.customFieldValues().entrySet()) {
+            sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
+        }
+        int nextSortOrder = sourceFieldDefinitions.size();
+        for (AddSourceDialog.NewCustomField field : newSource.newCustomFields()) {
+            int fieldDefId = sourceFieldDefinitionRepo.insert(projectId, "source", field.name(), nextSortOrder++);
+            sourceRepo.setFieldValue(newSourceId, fieldDefId, field.value());
+        }
+        return newSourceId;
     }
-    AddSourceDialog.Input newSource = input.newSource();
-    if (newSource == null) {
-        return null;
-    }
-    int newSourceId = sourceRepo.insert(
-            List.of(projectId),
-            newSource.title(),
-            newSource.author(),
-            newSource.genre()
-    );
-    for (var entry : newSource.customFieldValues().entrySet()) {
-        sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
-    }
-    int nextSortOrder = sourceFieldDefinitions.size();
-    for (AddSourceDialog.NewCustomField field : newSource.newCustomFields()) {
-        int fieldDefId = sourceFieldDefinitionRepo.insert(projectId, "source", field.name(), nextSortOrder++);
-        sourceRepo.setFieldValue(newSourceId, fieldDefId, field.value());
-    }
-    return newSourceId;
-}
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
         Task<T> task = new Task<>() {

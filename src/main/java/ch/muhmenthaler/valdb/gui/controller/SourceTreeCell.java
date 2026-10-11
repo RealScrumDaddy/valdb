@@ -2,10 +2,10 @@ package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.Source;
-import ch.muhmenthaler.valdb.model.tree.CustomFieldNode;
-import ch.muhmenthaler.valdb.model.tree.GenreNode;
-import ch.muhmenthaler.valdb.model.tree.SourceTreeNode;
-import ch.muhmenthaler.valdb.model.tree.TitleNode;
+import ch.muhmenthaler.valdb.model.sourceTree.CustomFieldNode;
+import ch.muhmenthaler.valdb.model.sourceTree.GenreNode;
+import ch.muhmenthaler.valdb.model.sourceTree.SourceTreeNode;
+import ch.muhmenthaler.valdb.model.sourceTree.TitleNode;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;

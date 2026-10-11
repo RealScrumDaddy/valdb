@@ -23,9 +23,6 @@ public class TagField extends FlowPane{
     public TagField(TextField textField, String promptText){
         this.textField = textField;
         getStyleClass().add("tag-field");
-        setHgap(6);
-        setVgap(6);
-        setPadding(new Insets(6));
 
         textField.getStyleClass().add("tag-input");
         textField.setPromptText(promptText);
@@ -62,29 +59,16 @@ public class TagField extends FlowPane{
         }
     }
 
-    private void addTag(String text){
-        if (this.tagSet.contains(text)) return;
-
-        Label label = new Label(text);
-        label.getStyleClass().add("tag-label");
-
-        Button removeBtn = new Button("×");
-        removeBtn.getStyleClass().add("tag-remove-button");
-
-        HBox tag = new HBox(4, label, removeBtn);
-        tag.getStyleClass().add("tag-pill");
-        tag.setUserData(text);
-        tag.setAlignment(Pos.CENTER);
-        tag.setPadding(new Insets(4, 8, 4, 8));
-
-        removeBtn.setOnAction(e -> {
-            getChildren().remove(tag);
-            this.tagSet.remove(text);
+    private void addTag(String text) {
+        if (tagSet.contains(text)) return;
+        HBox tag = TagPill.create(text, null, pill -> {
+            getChildren().remove(pill);
+            tagSet.remove(text);
         });
-
         getChildren().add(getChildren().indexOf(textField), tag);
-        this.tagSet.add(text);
+        tagSet.add(text);
     }
+
 
     public List<String> getTagSet(){
         return new ArrayList<>(this.tagSet);

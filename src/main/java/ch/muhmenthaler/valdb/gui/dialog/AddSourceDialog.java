@@ -1,6 +1,7 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
+import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
@@ -40,6 +41,7 @@ public class AddSourceDialog {
 
     public static Optional<Input> show(List<Source> availableSources, List<FieldDefinition> sourceFieldDefinitions) {
         Dialog<Input> dialog = new Dialog<>();
+        UiSettings.get().applyFontSize(dialog.getDialogPane());
         dialog.setTitle("New source");
         dialog.getDialogPane().getStylesheets().add(
                 Objects.requireNonNull(AddSourceDialog.class.getResource("/ch/muhmenthaler/valdb/views/tagfield.css")).toExternalForm()
@@ -128,7 +130,7 @@ public class AddSourceDialog {
 
         Label newFieldsWarningLabel = new Label("Give each new field a name before it can be saved.");
         newFieldsWarningLabel.setWrapText(true);
-        newFieldsWarningLabel.setStyle("-fx-text-fill: #b00020; -fx-font-size: 11px;");
+        newFieldsWarningLabel.setStyle("-fx-text-fill: #b00020; -fx-font-size: 0.85em;");
         newFieldsWarningLabel.visibleProperty().bind(newFieldsValid.not());
         newFieldsWarningLabel.managedProperty().bind(newFieldsWarningLabel.visibleProperty());
 

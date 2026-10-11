@@ -1,14 +1,19 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
+import ch.muhmenthaler.valdb.gui.input.ChapterFilterBinding;
+import ch.muhmenthaler.valdb.model.Chapter;
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
-import ch.muhmenthaler.valdb.model.tree.*;
+import ch.muhmenthaler.valdb.model.sourceTree.*;
+import ch.muhmenthaler.valdb.repository.ChapterRepository;
 import ch.muhmenthaler.valdb.repository.FieldDefinitionRepository;
+import ch.muhmenthaler.valdb.repository.SnippetRepository;
 import ch.muhmenthaler.valdb.repository.SourceRepository;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 
@@ -19,9 +24,13 @@ import java.util.stream.Collectors;
 
 public class SourceListController {
     @FXML private TreeView<SourceTreeNode> sourceTree;
+    @FXML private ComboBox<Chapter> chapterFilter;
     private final SourceRepository sourceRepo = new SourceRepository();
     private final FieldDefinitionRepository fieldDefinitionRepo = new FieldDefinitionRepository();
+    private final SnippetRepository snippetRepo = new SnippetRepository();
+    private final ChapterRepository chapterRepo = new ChapterRepository();
     private Integer projectId;
+    private ChapterFilterBinding chapterFilterBinding;
 
     private record LoadResult(List<Source> sources, List<FieldDefinition> fieldDefinitions) {}
 
@@ -29,17 +38,28 @@ public class SourceListController {
     public void initialize() {
         sourceTree.setRoot(new TreeItem<>(new AuthorNode("Sources")));
         sourceTree.setCellFactory(tv -> new SourceTreeCell(this::persistEdit));
+        this.chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::loadAll);
     }
 
     public void setProjectId(int projectId) {
         this.projectId = projectId;
-        loadAll();
+        runAsync(
+                () -> chapterRepo.loadByIds(chapterRepo.listByProject(projectId)),
+                chapters -> {
+                    this.chapterFilterBinding.setChapters(chapters);
+                    loadAll();
+                }
+        );
     }
 
     private void loadAll() {
+        Chapter selectedChapter = chapterFilterBinding.getSelectedChapter();
         runAsync(
                 () -> {
-                    List<Source> sources = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
+                    List<Integer> sourceIds = selectedChapter == null
+                            ? sourceRepo.listByProject(projectId)
+                            : snippetRepo.listSourceIdsByChapter(selectedChapter.id());
+                    List<Source> sources = sourceRepo.loadByIds(sourceIds);
                     List<FieldDefinition> fieldDefinitions = fieldDefinitionRepo.loadByIds(
                             fieldDefinitionRepo.listByProject(projectId, "source"));
                     return new LoadResult(sources, fieldDefinitions);

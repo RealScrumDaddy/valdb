@@ -1,4 +1,4 @@
-package ch.muhmenthaler.valdb.model.tree;
+package ch.muhmenthaler.valdb.model.sourceTree;
 
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
 import ch.muhmenthaler.valdb.model.Source;

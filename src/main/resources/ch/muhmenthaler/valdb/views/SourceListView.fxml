@@ -3,9 +3,22 @@
 <?import javafx.scene.control.TreeView?>
 <?import javafx.scene.layout.BorderPane?>
 
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="ch.muhmenthaler.valdb.gui.controller.SourceListController">
+    <top>
+        <HBox spacing="6" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="8" right="8" bottom="8" left="8"/>
+            </padding>
+            <Label text="Chapter:"/>
+            <ComboBox fx:id="chapterFilter"/>
+        </HBox>
+    </top>
     <center>
         <TreeView fx:id="sourceTree" showRoot="false"/>
     </center>

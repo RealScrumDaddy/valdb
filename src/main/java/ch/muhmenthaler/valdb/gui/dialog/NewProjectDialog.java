@@ -1,5 +1,6 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
+import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 
@@ -11,6 +12,7 @@ public class NewProjectDialog {
 
     public static Optional<Input> show() {
         Dialog<Input> dialog = new Dialog<>();
+        UiSettings.get().applyFontSize(dialog.getDialogPane());
         dialog.setTitle("New project");
 
         TextField nameField = new TextField();

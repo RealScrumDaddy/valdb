@@ -2,6 +2,7 @@ package ch.muhmenthaler.valdb.gui.dialog;
 
 import ch.muhmenthaler.valdb.gui.input.TagField;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
+import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.Chapter;
 import ch.muhmenthaler.valdb.model.FieldDefinition;
 import ch.muhmenthaler.valdb.model.Source;
@@ -41,6 +42,7 @@ public class AddSnippetDialog {
     public static Optional<Input> show(List<Chapter> availableChapters, List<Tag> availableTags,
                                        List<Source> availableSources, List<FieldDefinition> sourceFieldDefinitions) {
         Dialog<Input> dialog = new Dialog<>();
+        UiSettings.get().applyFontSize(dialog.getDialogPane());
         dialog.setTitle("Add snippet");
         dialog.getDialogPane().getStylesheets().add(
                 Objects.requireNonNull(AddSnippetDialog.class.getResource("/ch/muhmenthaler/valdb/views/tagfield.css")).toExternalForm()

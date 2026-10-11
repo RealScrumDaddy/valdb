@@ -2,6 +2,7 @@ package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.business.AppLogger;
 import ch.muhmenthaler.valdb.gui.dialog.NewProjectDialog;
+import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.Project;
 import ch.muhmenthaler.valdb.repository.ProjectRepository;
 
@@ -13,6 +14,8 @@ import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.input.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
@@ -30,11 +33,12 @@ public class MainController {
     @FXML private VBox sidebar;
     @FXML private Button collapseButton;
     @FXML private ListView<Project> projectList;
-    @FXML private VBox viewSelector;
+    @FXML private HBox viewSelector;
     @FXML private ToggleButton sourcesToggle;
     @FXML private ToggleButton snippetsToggle;
     @FXML private Button newProjectButton;
     @FXML private StackPane contentArea;
+    @FXML private Slider fontSizeSlider;
 
     private final ProjectRepository projectRepo = new ProjectRepository();
     private final ObservableList<Project> items = FXCollections.observableArrayList();
@@ -93,6 +97,40 @@ public class MainController {
         });
 
         loadProjects();
+
+        UiSettings ui = UiSettings.get();
+        ui.applyFontSize(contentArea);
+
+        // Slider: range comes from UiSettings so the limits live in one place
+        fontSizeSlider.setMin(UiSettings.MIN_FONT_SIZE);
+        fontSizeSlider.setMax(UiSettings.MAX_FONT_SIZE);
+        fontSizeSlider.setMajorTickUnit(1);
+        fontSizeSlider.setMinorTickCount(0);
+        fontSizeSlider.setSnapToTicks(true);
+        fontSizeSlider.setBlockIncrement(1);
+        fontSizeSlider.valueProperty().bindBidirectional(ui.fontSizeProperty());
+        fontSizeSlider.setTooltip(new Tooltip("Text size — Ctrl +/−, Ctrl 0 or double-click to reset"));
+        fontSizeSlider.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) ui.resetFontSize();
+        });
+
+        // Ctrl/Cmd + mouse wheel over the content
+        contentArea.addEventFilter(ScrollEvent.SCROLL, e -> {
+            if (!e.isShortcutDown()) return;
+            ui.changeFontSize(e.getDeltaY() > 0 ? 1 : -1);
+            e.consume();
+        });
+
+        // Keyboard shortcuts (the scene doesn't exist yet during initialize)
+        contentArea.sceneProperty().addListener((obs, oldScene, scene) -> {
+            if (scene == null) return;
+            var acc = scene.getAccelerators();
+            acc.put(new KeyCharacterCombination("+", KeyCombination.SHORTCUT_DOWN), () -> ui.changeFontSize(1));
+            acc.put(new KeyCodeCombination(KeyCode.ADD, KeyCombination.SHORTCUT_DOWN), () -> ui.changeFontSize(1));
+            acc.put(new KeyCharacterCombination("-", KeyCombination.SHORTCUT_DOWN), () -> ui.changeFontSize(-1));
+            acc.put(new KeyCodeCombination(KeyCode.SUBTRACT, KeyCombination.SHORTCUT_DOWN), () -> ui.changeFontSize(-1));
+            acc.put(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.SHORTCUT_DOWN), ui::resetFontSize);
+        });
     }
 
     private void fireViewRequest(ViewKind kind) {
@@ -137,7 +175,7 @@ public class MainController {
 
         projectList.setVisible(!collapsed);
         projectList.setManaged(!collapsed);
-        boolean showViewSelector = !collapsed && selectedProject != null;
+        boolean showViewSelector = selectedProject != null;
         viewSelector.setVisible(showViewSelector);
         viewSelector.setManaged(showViewSelector);
         newProjectButton.setVisible(!collapsed);
