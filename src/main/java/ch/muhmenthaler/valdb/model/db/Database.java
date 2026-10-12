@@ -1,6 +1,7 @@
 package ch.muhmenthaler.valdb.model.db;
 
 import ch.muhmenthaler.valdb.business.AppLogger;
+import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -8,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.sql.*;
 import java.util.logging.Level;
 
@@ -19,7 +21,11 @@ public class Database {
     if (connection == null) {
         try {
             Path dbPath = resolveDbPath();
-            Files.createDirectories(dbPath.getParent());
+            Path backup = UiSettings.get().backupPath();
+            if (!Files.exists(dbPath) && backup != null && Files.exists(backup)) {
+                Files.createDirectories(dbPath.getParent());
+                Files.copy(backup, dbPath);
+            }
 
             connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             try (Statement st = connection.createStatement()) {
@@ -40,7 +46,7 @@ private static Path resolveDbPath() {
     Path baseDir;
 
     if (os.contains("win")) {
-        String appData = System.getenv("APPDATA");
+        String appData = System.getenv("LOCALAPPDATA");
         baseDir = Paths.get(appData, "ValDB");
     } else {
         String xdgData = System.getenv("XDG_DATA_HOME");
@@ -61,6 +67,18 @@ private static Path resolveDbPath() {
         // if (current < 2) runScript("/migrations/V2__something.sql");
 
         setUserVersion(target);
+    }
+
+    public static synchronized void backupTo(Path backupFile) throws SQLException, IOException {
+        Files.createDirectories(backupFile.getParent());
+        Path tmp = backupFile.resolveSibling(backupFile.getFileName() + ".tmp");
+        Files.deleteIfExists(tmp);
+        try (PreparedStatement ps = get().prepareStatement("VACUUM INTO ?")) {
+            ps.setString(1, tmp.toString());
+            ps.execute();
+        }
+        // write to .tmp first, so a half-written backup never replaces a good one
+        Files.move(tmp, backupFile, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static int getUserVersion() throws SQLException {
