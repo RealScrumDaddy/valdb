@@ -10,10 +10,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class TagField extends FlowPane{
 
@@ -69,6 +66,13 @@ public class TagField extends FlowPane{
         tagSet.add(text);
     }
 
+    public void setTags(Collection<String> tags) {
+        getChildren().removeIf(node -> node != textField);
+        tagSet.clear();
+        for (String tag : tags) {
+            if (tag != null && !tag.isBlank()) addTag(tag.trim());
+        }
+    }
 
     public List<String> getTagSet(){
         return new ArrayList<>(this.tagSet);

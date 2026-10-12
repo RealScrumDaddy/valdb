@@ -1,12 +1,14 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
-import ch.muhmenthaler.valdb.gui.dialog.AddSnippetDialog;
 import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.gui.dialog.SnippetDialog;
+import ch.muhmenthaler.valdb.gui.form.SnippetForm;
 import ch.muhmenthaler.valdb.gui.input.ChapterFilterBinding;
 import ch.muhmenthaler.valdb.model.*;
 import ch.muhmenthaler.valdb.repository.*;
 import ch.muhmenthaler.valdb.gui.input.TagPillCell;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -14,12 +16,10 @@ import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
 
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -53,6 +53,8 @@ public class SnippetListController {
     private List<FieldDefinition> sourceFieldDefinitions = List.of();
     private Map<Integer, String> sourceFieldDefinitionsById = Map.of();
     private Map<Integer, Tag> tagsById = Map.of();
+
+    private record ResolvedReferences(Integer sourceId, List<Integer> chapterIds, List<Integer> tagIds) {}
 
     @FXML
     public void initialize() {
@@ -90,6 +92,22 @@ public class SnippetListController {
         tagsColumn.setCellFactory(col -> new TagPillCell<>());
         snippetTable.setItems(items);
         chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::loadAll);
+        snippetTable.setRowFactory(table -> {
+            TableRow<Snippet> row = new TableRow<>();
+
+            MenuItem editItem = new MenuItem("Edit snippet…");
+            editItem.setOnAction(e -> editSnippet(row.getItem()));
+            ContextMenu menu = new ContextMenu(editItem);
+            row.contextMenuProperty().bind(
+                    Bindings.when(row.emptyProperty()).then((ContextMenu) null).otherwise(menu));
+
+            row.setOnMouseClicked(e -> {
+                if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2 && !row.isEmpty()) {
+                    editSnippet(row.getItem());
+                }
+            });
+            return row;
+        });
     }
 
     /** Must be called once, right after this controller is loaded, before any data can show. */
@@ -152,43 +170,41 @@ public class SnippetListController {
 
     @FXML
     private void onAddSnippet() {
-        AddSnippetDialog.show(chapters, tags, sources, sourceFieldDefinitions).ifPresent(input -> runAsync(
+        SnippetDialog.showAdd(chapters, tags, sources, sourceFieldDefinitions).ifPresent(input -> runAsync(
                 () -> {
-                    Integer sourceId = resolveSourceId(input);
-
-                    List<Integer> resolvedChapterIds = new java.util.ArrayList<>(input.chapterIds());
-                    int nextChapterSortOrder = chapters.size();
-                    for (String title : input.newChapterTitles()) {
-                        int newId = chapterRepo.insert(projectId, title, nextChapterSortOrder++);
-                        resolvedChapterIds.add(newId);
-                    }
-
-                    List<Integer> resolvedTagIds = new java.util.ArrayList<>(input.tagIds());
-                    for (String name : input.newTagNames()) {
-                        int newId = tagRepo.insert(projectId, name, null); // color left unset for now
-                        resolvedTagIds.add(newId);
-                    }
-
-                    int snippetId = snippetRepo.insert(
-                            List.of(projectId),
-                            sourceId,
-                            input.original(),
-                            input.translation(),
-                            input.verseStart(),
-                            input.verseEnd(),
-                            input.page()
-                    );
-
-                    for (int chapterId : resolvedChapterIds) snippetRepo.linkChapter(snippetId, chapterId);
-                    for (int tagId : resolvedTagIds) snippetRepo.linkTag(snippetId, tagId);
-
+                    ResolvedReferences refs = resolveReferences(input);
+                    int snippetId = snippetRepo.insert(List.of(projectId), refs.sourceId(),
+                            input.original(), input.translation(),
+                            input.verseStart(), input.verseEnd(), input.page());
+                    snippetRepo.setChapters(snippetId, refs.chapterIds());
+                    snippetRepo.setTags(snippetId, refs.tagIds());
                     return snippetId;
                 },
                 snippetId -> loadAll()
         ));
     }
 
-    private Integer resolveSourceId(AddSnippetDialog.Input input) throws SQLException {
+    private void editSnippet(Snippet snippet) {
+        SnippetDialog.showEdit(snippet, chapters, tags, sources, sourceFieldDefinitions)
+                .ifPresent(input -> saveEdit(snippet.id(), input));
+    }
+
+    private void saveEdit(int snippetId, SnippetForm.Input input) {
+        runAsync(
+                () -> {
+                    ResolvedReferences refs = resolveReferences(input);
+                    snippetRepo.update(snippetId, refs.sourceId(),
+                            input.original(), input.translation(),
+                            input.verseStart(), input.verseEnd(), input.page());
+                    snippetRepo.setChapters(snippetId, refs.chapterIds());
+                    snippetRepo.setTags(snippetId, refs.tagIds());
+                    return null;
+                },
+                ignored -> loadAll()
+        );
+    }
+
+    private Integer resolveSourceId(SnippetForm.Input input) throws SQLException {
         if (input.existingSourceId() != null) {
             return input.existingSourceId();
         }
@@ -223,5 +239,21 @@ public class SnippetListController {
             new Alert(Alert.AlertType.ERROR, "Database error: " + task.getException().getMessage()).showAndWait();
         });
         new Thread(task).start();
+    }
+
+    private ResolvedReferences resolveReferences(SnippetForm.Input input) throws SQLException {
+        Integer sourceId = resolveSourceId(input);
+
+        List<Integer> chapterIds = new ArrayList<>(input.chapterIds());
+        int nextChapterSortOrder = chapters.size();
+        for (String title : input.newChapterTitles()) {
+            chapterIds.add(chapterRepo.insert(projectId, title, nextChapterSortOrder++));
+        }
+
+        List<Integer> tagIds = new ArrayList<>(input.tagIds());
+        for (String name : input.newTagNames()) {
+            tagIds.add(tagRepo.insert(projectId, name, null)); // color left unset for now
+        }
+        return new ResolvedReferences(sourceId, chapterIds, tagIds);
     }
 }

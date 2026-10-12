@@ -311,4 +311,57 @@ public class SnippetRepository {
         List<Snippet> results = loadByIds(List.of(id));
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
+
+    public void update(int snippetId, Integer sourceId, String original, String translation,
+                       Integer verseStart, Integer verseEnd, Integer page) throws SQLException {
+        String sql = "UPDATE snippets SET source_id = ?, original_content = ?, translation_content = ?, "
+                + "verse_start = ?, verse_end = ?, page = ? WHERE id = ?";
+        try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
+            setNullableInt(ps, 1, sourceId);
+            ps.setString(2, original);
+            ps.setString(3, translation);
+            setNullableInt(ps, 4, verseStart);
+            setNullableInt(ps, 5, verseEnd);
+            setNullableInt(ps, 6, page);
+            ps.setInt(7, snippetId);
+            ps.executeUpdate();
+        }
+    }
+
+    public void setChapters(int snippetId, Collection<Integer> chapterIds) throws SQLException {
+        replaceLinks("snippet_chapters", "chapter_id", snippetId, chapterIds);
+    }
+
+    public void setTags(int snippetId, Collection<Integer> tagIds) throws SQLException {
+        replaceLinks("snippet_tags", "tag_id", snippetId, tagIds);
+    }
+
+    private void replaceLinks(String table, String column, int snippetId, Collection<Integer> ids) throws SQLException {
+        Set<Integer> wanted = new LinkedHashSet<>(ids);
+
+        String deleteSql = "DELETE FROM " + table + " WHERE snippet_id = ?";
+        if (!wanted.isEmpty()) {
+            deleteSql += " AND " + column + " NOT IN (" + String.join(",", Collections.nCopies(wanted.size(), "?")) + ")";
+        }
+        try (PreparedStatement ps = Database.get().prepareStatement(deleteSql)) {
+            ps.setInt(1, snippetId);
+            int index = 2;
+            for (int id : wanted) ps.setInt(index++, id);
+            ps.executeUpdate();
+        }
+
+        String insertSql = "INSERT OR IGNORE INTO " + table + " (snippet_id, " + column + ") VALUES (?, ?)";
+        try (PreparedStatement ps = Database.get().prepareStatement(insertSql)) {
+            for (int id : wanted) {
+                ps.setInt(1, snippetId);
+                ps.setInt(2, id);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    private static void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value == null) ps.setNull(index, Types.INTEGER);
+        else ps.setInt(index, value);
+    }
 }
