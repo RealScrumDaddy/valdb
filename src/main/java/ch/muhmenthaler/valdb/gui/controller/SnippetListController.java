@@ -73,8 +73,12 @@ public class SnippetListController {
             return new SimpleStringProperty(verseStart != null ? String.valueOf(verseStart) : "");
         });
         pageColumn.setCellValueFactory(c -> {
-            Integer page = c.getValue().page();
-            return new SimpleStringProperty(page != null ? String.valueOf(page) : "");
+            Integer pageStart = c.getValue().pageStart();
+            Integer pageEnd = c.getValue().pageEnd();
+            if (pageStart != null && pageEnd != null) {
+                return new SimpleStringProperty(pageStart + "-" + pageEnd);
+            }
+            return new SimpleStringProperty(pageStart != null ? String.valueOf(pageStart) : "");
         });
         chapterColumn.setCellValueFactory(c -> {
             String joined = c.getValue().chapterIds().stream()
@@ -175,7 +179,7 @@ public class SnippetListController {
                     ResolvedReferences refs = resolveReferences(input);
                     int snippetId = snippetRepo.insert(List.of(projectId), refs.sourceId(),
                             input.original(), input.translation(),
-                            input.verseStart(), input.verseEnd(), input.page());
+                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd());
                     snippetRepo.setChapters(snippetId, refs.chapterIds());
                     snippetRepo.setTags(snippetId, refs.tagIds());
                     return snippetId;
@@ -195,7 +199,7 @@ public class SnippetListController {
                     ResolvedReferences refs = resolveReferences(input);
                     snippetRepo.update(snippetId, refs.sourceId(),
                             input.original(), input.translation(),
-                            input.verseStart(), input.verseEnd(), input.page());
+                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd());
                     snippetRepo.setChapters(snippetId, refs.chapterIds());
                     snippetRepo.setTags(snippetId, refs.tagIds());
                     return null;

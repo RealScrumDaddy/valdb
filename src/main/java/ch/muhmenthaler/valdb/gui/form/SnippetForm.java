@@ -30,7 +30,8 @@ public class SnippetForm extends GridPane {
             String translation,
             Integer verseStart,
             Integer verseEnd,
-            Integer page,
+            Integer pageStart,
+            Integer pageEnd,
             List<Integer> chapterIds,
             List<String> newChapterTitles,
             List<Integer> tagIds,
@@ -41,7 +42,7 @@ public class SnippetForm extends GridPane {
             AddSourceDialog.Input newSource
     ) {}
 
-    private record Verse(Integer start, Integer end) {}
+    private record VerseOrPageRange(Integer start, Integer end) {}
 
     private final List<Chapter> availableChapters;
     private final List<Tag> availableTags;
@@ -70,7 +71,7 @@ public class SnippetForm extends GridPane {
         originalField.setWrapText(true);
         translationField.setWrapText(true);
         verseField.setPromptText("e.g. 12 or 57-65");
-        pageField.setPromptText("e.g. 12");
+        pageField.setPromptText("e.g. 12 or 57-65");
 
         chapterField = new TagField(
                 new TextFieldWithAutoComplete(availableChapters.stream().map(Chapter::title).toList()),
@@ -111,7 +112,8 @@ public class SnippetForm extends GridPane {
         }, sourceField.textProperty(), pendingNewSource);
 
         BooleanBinding numbersValid = Bindings.createBooleanBinding(
-                () -> parseVerse(verseField.getText()) != null && isBlankOrInt(pageField.getText()),
+                () -> parseVerseOrPageRange(verseField.getText()) != null &&
+                        parseVerseOrPageRange(pageField.getText()) != null,
                 verseField.textProperty(), pageField.textProperty());
 
         HBox sourceRow = new HBox(6, sourceField, newSourceButton, sourceHintLabel);
@@ -120,7 +122,7 @@ public class SnippetForm extends GridPane {
                 "No existing source matches this title. Use \"New Source…\" to create one, or clear the field.",
                 sourceValid.not()));
         VBox pageBox = new VBox(4, pageField, warningLabel(
-                "Verse must look like 12 or 57-65, and page must be a whole number.",
+                "Verse and page must look like 12 or 57-65",
                 numbersValid.not()));
 
         setHgap(8);
@@ -146,8 +148,8 @@ public class SnippetForm extends GridPane {
     public void setSnippet(Snippet snippet) {
         originalField.setText(Objects.requireNonNullElse(snippet.originalContent(), ""));
         translationField.setText(Objects.requireNonNullElse(snippet.translationContent(), ""));
-        verseField.setText(formatVerse(snippet.verseStart(), snippet.verseEnd()));
-        pageField.setText(snippet.page() == null ? "" : String.valueOf(snippet.page()));
+        verseField.setText(formatVerseOrPageRange(snippet.verseStart(), snippet.verseEnd()));
+        pageField.setText(formatVerseOrPageRange(snippet.pageStart(), snippet.pageEnd()));
         chapterField.setTags(namesFor(snippet.chapterIds(), availableChapters, Chapter::id, Chapter::title));
         tagField.setTags(namesFor(snippet.tagIds(), availableTags, Tag::id, Tag::name));
 
@@ -158,7 +160,8 @@ public class SnippetForm extends GridPane {
 
     /** Reads the current field values. Only meaningful while validProperty() is true. */
     public Input getInput() {
-        Verse verse = Objects.requireNonNullElse(parseVerse(verseField.getText()), new Verse(null, null));
+        VerseOrPageRange verse = Objects.requireNonNullElse(parseVerseOrPageRange(verseField.getText()), new VerseOrPageRange(null, null));
+        VerseOrPageRange page = Objects.requireNonNullElse(parseVerseOrPageRange(pageField.getText()), new VerseOrPageRange(null, null));
 
         List<Integer> chapterIds = new ArrayList<>();
         List<String> newChapterTitles = new ArrayList<>();
@@ -187,7 +190,8 @@ public class SnippetForm extends GridPane {
                 translationField.getText(),
                 verse.start(),
                 verse.end(),
-                parseIntOrNull(pageField.getText()),
+                page.start(),
+                page.end(),
                 chapterIds,
                 newChapterTitles,
                 tagIds,
@@ -235,34 +239,21 @@ public class SnippetForm extends GridPane {
         }
     }
 
-    private static String formatVerse(Integer start, Integer end) {
+    private static String formatVerseOrPageRange(Integer start, Integer end) {
         if (start == null) return "";
         return end == null ? String.valueOf(start) : start + "-" + end;
     }
 
     /** Accepts "", "12" or "57-65". Returns null if the text is invalid. */
-    private static Verse parseVerse(String text) {
-        if (text == null || text.isBlank()) return new Verse(null, null);
+    private static VerseOrPageRange parseVerseOrPageRange(String text) {
+        if (text == null || text.isBlank()) return new VerseOrPageRange(null, null);
         String trimmed = text.trim();
         try {
             if (trimmed.contains("-")) {
                 String[] parts = trimmed.split("-", 2);
-                return new Verse(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
+                return new VerseOrPageRange(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
             }
-            return new Verse(Integer.parseInt(trimmed), null);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static boolean isBlankOrInt(String text) {
-        return text == null || text.isBlank() || parseIntOrNull(text) != null;
-    }
-
-    private static Integer parseIntOrNull(String text) {
-        if (text == null || text.isBlank()) return null;
-        try {
-            return Integer.parseInt(text.trim());
+            return new VerseOrPageRange(Integer.parseInt(trimmed), null);
         } catch (NumberFormatException e) {
             return null;
         }

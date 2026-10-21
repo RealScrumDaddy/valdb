@@ -11,7 +11,8 @@ public record Snippet(
         String translationContent,
         Integer verseStart,       // null if not applicable
         Integer verseEnd,         // null unless the citation is a range, e.g. 57-65
-        Integer page,             // null if not applicable
+        Integer pageStart,        // null if not applicable
+        Integer pageEnd,          // null unless the citation is a range, e.g.  57-65
         List<Integer> chapterIds,
         List<Integer> tagIds,
         Map<String, String> customFields
