@@ -10,7 +10,7 @@ import java.util.*;
 public class SnippetRepository {
 
     public int insert(List<Integer> projectIds, Integer sourceId, String original, String translation,
-                      Integer verseStart, Integer verseEnd, Integer page) throws SQLException {
+                      Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd) throws SQLException {
         if (projectIds == null || projectIds.isEmpty()) {
             throw new IllegalArgumentException("A snippet must belong to at least one project");
         }
@@ -19,15 +19,16 @@ public class SnippetRepository {
         conn.setAutoCommit(false);
         try {
             int snippetId;
-            String sql = "INSERT INTO snippets (source_id, original_content, translation_content, verse_start, verse_end, page) " +
-                    "VALUES (?, ?, ?, ?, ?, ?)";
+            String sql = "INSERT INTO snippets (source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 if (sourceId != null) ps.setInt(1, sourceId); else ps.setNull(1, Types.INTEGER);
                 ps.setString(2, original);
                 ps.setString(3, translation);
                 if (verseStart != null) ps.setInt(4, verseStart); else ps.setNull(4, Types.INTEGER);
                 if (verseEnd != null) ps.setInt(5, verseEnd); else ps.setNull(5, Types.INTEGER);
-                if (page != null) ps.setInt(6, page); else ps.setNull(6, Types.INTEGER);
+                if (pageStart != null) ps.setInt(6, pageStart); else ps.setNull(6, Types.INTEGER);
+                if (pageEnd != null) ps.setInt(7, pageEnd); else ps.setNull(7, Types.INTEGER);
                 ps.executeUpdate();
                 try (ResultSet keys = ps.getGeneratedKeys()) {
                     keys.next();
@@ -188,9 +189,10 @@ public class SnippetRepository {
         Map<Integer, Integer> sourceIds = new HashMap<>();
         Map<Integer, Integer> verseStarts = new HashMap<>();
         Map<Integer, Integer> verseEnds = new HashMap<>();
-        Map<Integer, Integer> pages = new HashMap<>();
+        Map<Integer, Integer> pageStarts = new HashMap<>();
+        Map<Integer, Integer> pageEnds = new HashMap<>();
 
-        String snippetSql = "SELECT id, source_id, original_content, translation_content, verse_start, verse_end, page " +
+        String snippetSql = "SELECT id, source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end " +
                 "FROM snippets WHERE id IN (" + placeholders + ")";
         try (PreparedStatement ps = Database.get().prepareStatement(snippetSql)) {
             for (int i = 0; i < ids.size(); i++) ps.setInt(i + 1, ids.get(i));
@@ -209,8 +211,11 @@ public class SnippetRepository {
                     int verseEnd = rs.getInt("verse_end");
                     if (!rs.wasNull()) verseEnds.put(id, verseEnd);
 
-                    int page = rs.getInt("page");
-                    if (!rs.wasNull()) pages.put(id, page);
+                    int pageStart = rs.getInt("page_start");
+                    if (!rs.wasNull()) pageStarts.put(id, pageStart);
+
+                    int pageEnd = rs.getInt("page_end");
+                    if (!rs.wasNull()) pageEnds.put(id, pageEnd);
                 }
             }
         }
@@ -298,7 +303,8 @@ public class SnippetRepository {
                     translations.get(id),
                     verseStarts.get(id),
                     verseEnds.get(id),
-                    pages.get(id),
+                    pageStarts.get(id),
+                    pageEnds.get(id),
                     chaptersBySnippet.get(id),
                     tagsBySnippet.get(id),
                     fieldsBySnippet.get(id)
@@ -313,17 +319,18 @@ public class SnippetRepository {
     }
 
     public void update(int snippetId, Integer sourceId, String original, String translation,
-                       Integer verseStart, Integer verseEnd, Integer page) throws SQLException {
+                       Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd) throws SQLException {
         String sql = "UPDATE snippets SET source_id = ?, original_content = ?, translation_content = ?, "
-                + "verse_start = ?, verse_end = ?, page = ? WHERE id = ?";
+                + "verse_start = ?, verse_end = ?, page_start = ?, page_end = ? WHERE id = ?";
         try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
             setNullableInt(ps, 1, sourceId);
             ps.setString(2, original);
             ps.setString(3, translation);
             setNullableInt(ps, 4, verseStart);
             setNullableInt(ps, 5, verseEnd);
-            setNullableInt(ps, 6, page);
-            ps.setInt(7, snippetId);
+            setNullableInt(ps, 6, pageStart);
+            setNullableInt(ps, 7, pageEnd);
+            ps.setInt(8, snippetId);
             ps.executeUpdate();
         }
     }

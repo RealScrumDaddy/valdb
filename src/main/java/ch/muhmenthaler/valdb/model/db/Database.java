@@ -33,34 +33,46 @@ public class Database {
         }
     }
     return connection;
-}
-
-private static Path resolveDbPath() {
-    String os = System.getProperty("os.name").toLowerCase();
-    Path baseDir;
-
-    if (os.contains("win")) {
-        String appData = System.getenv("APPDATA");
-        baseDir = Paths.get(appData, "ValDB");
-    } else {
-        String xdgData = System.getenv("XDG_DATA_HOME");
-        Path dataHome = (xdgData != null && !xdgData.isBlank())
-                ? Paths.get(xdgData)
-                : Paths.get(System.getProperty("user.home"), ".local", "share");
-        baseDir = dataHome.resolve("ValDB");
     }
 
-    return baseDir.resolve("valdb.sqlite");
-}
+    private static Path resolveDbPath() {
+        String os = System.getProperty("os.name").toLowerCase();
+        Path baseDir;
+
+        if (os.contains("win")) {
+            String appData = System.getenv("APPDATA");
+            baseDir = Paths.get(appData, "ValDB");
+        } else {
+            String xdgData = System.getenv("XDG_DATA_HOME");
+            Path dataHome = (xdgData != null && !xdgData.isBlank())
+                    ? Paths.get(xdgData)
+                    : Paths.get(System.getProperty("user.home"), ".local", "share");
+            baseDir = dataHome.resolve("ValDB");
+        }
+
+        return baseDir.resolve("valdb.sqlite");
+    }
 
     private static void migrate() throws SQLException {
         int current = getUserVersion();
-        int target = 1; // bump this and add a branch below for each future migration
 
-        if (current < 1) runScript("/ch/muhmenthaler/valdb/model/db/migration/V1__init.sql");
-        // if (current < 2) runScript("/migrations/V2__something.sql");
+        if (current < 1) applyMigration(1, "/ch/muhmenthaler/valdb/model/db/migration/V1__init.sql");
+        if (current < 2) applyMigration(2, "/ch/muhmenthaler/valdb/model/db/migration/V2__page_range.sql");
+        // if (current < 3) applyMigration(3, ".../V3__something.sql");
+    }
 
-        setUserVersion(target);
+    private static void applyMigration(int version, String resourcePath) throws SQLException {
+        connection.setAutoCommit(false);
+        try {
+            runScript(resourcePath);
+            setUserVersion(version);
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
     }
 
     private static int getUserVersion() throws SQLException {
