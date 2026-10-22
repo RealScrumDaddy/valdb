@@ -46,15 +46,19 @@ jobs:
       # a `dotnet tool install wix` step here, it would pull WiX 5/6 and
       # break the build.
 
-      - name: Build fat jar
-        run: ./gradlew customFatJar --no-daemon
-        shell: bash
-
-      - name: Resolve app version
+      - name: Resolve app version from tag
         id: appver
         run: |
-          VERSION=$(./gradlew -q printAppVersion --no-daemon)
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not of the form vX.Y.Z"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Build fat jar
+        run: ./gradlew customFatJar -PappVersion=${{ steps.appver.outputs.version }} --no-daemon
         shell: bash
 
       - name: Stage jar for jpackage

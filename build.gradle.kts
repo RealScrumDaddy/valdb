@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "ch.muhmenthaler.valdb"
-version = "0.0.1-SNAPSHOT"
+version = providers.gradleProperty("appVersion").getOrElse("0.0.1")
 
 repositories {
     mavenCentral()
