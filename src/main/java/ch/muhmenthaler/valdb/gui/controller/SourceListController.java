@@ -1,5 +1,8 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
+import ch.muhmenthaler.valdb.business.SourceService;
+import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.gui.dialog.ConfirmDeleteDialog;
 import ch.muhmenthaler.valdb.gui.input.ChapterFilterBinding;
 import ch.muhmenthaler.valdb.model.Chapter;
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
@@ -31,13 +34,16 @@ public class SourceListController {
     private final ChapterRepository chapterRepo = new ChapterRepository();
     private Integer projectId;
     private ChapterFilterBinding chapterFilterBinding;
+    private final SourceService sourceService = new SourceService();
+    private List<Source> allSources = List.of();
+    private List<FieldDefinition> fieldDefinitions = List.of();
 
-    private record LoadResult(List<Source> sources, List<FieldDefinition> fieldDefinitions) {}
+    private record LoadResult(List<Source> allSources, Set<Integer> visibleIds, List<FieldDefinition> fieldDefinitions) {}
 
     @FXML
     public void initialize() {
         sourceTree.setRoot(new TreeItem<>(new AuthorNode("Sources")));
-        sourceTree.setCellFactory(tv -> new SourceTreeCell(this::persistEdit));
+        sourceTree.setCellFactory(tv -> new SourceTreeCell(this::persistEdit, this::deleteSource));
         this.chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::loadAll);
     }
 
@@ -56,17 +62,32 @@ public class SourceListController {
         Chapter selectedChapter = chapterFilterBinding.getSelectedChapter();
         runAsync(
                 () -> {
-                    List<Integer> sourceIds = selectedChapter == null
-                            ? sourceRepo.listByProject(projectId)
-                            : snippetRepo.listSourceIdsByChapter(selectedChapter.id());
-                    List<Source> sources = sourceRepo.loadByIds(sourceIds);
-                    List<FieldDefinition> fieldDefinitions = fieldDefinitionRepo.loadByIds(
+                    List<Source> sources = sourceRepo.loadByIds(sourceRepo.listByProject(projectId));
+                    Set<Integer> visibleIds = selectedChapter == null
+                            ? null
+                            : new HashSet<>(snippetRepo.listSourceIdsByChapter(selectedChapter.id()));
+                    List<FieldDefinition> defs = fieldDefinitionRepo.loadByIds(
                             fieldDefinitionRepo.listByProject(projectId, "source"));
-                    return new LoadResult(sources, fieldDefinitions);
+                    return new LoadResult(sources, visibleIds, defs);
                 },
-                result -> populateTree(result.sources(), result.fieldDefinitions())
+                result -> {
+                    allSources = result.allSources();
+                    fieldDefinitions = result.fieldDefinitions();
+                    List<Source> visible = result.visibleIds() == null
+                            ? allSources
+                            : allSources.stream().filter(s -> result.visibleIds().contains(s.id())).toList();
+                    populateTree(visible, fieldDefinitions);
+                }
         );
     }
+
+    @FXML
+    private void onAddSource() {
+        AddSourceDialog.show(allSources, fieldDefinitions).ifPresent(input -> runAsync(
+                () -> sourceService.create(projectId, input, fieldDefinitions.size()),
+                newId -> loadAll()));
+    }
+
 
     private void populateTree(List<Source> sources, List<FieldDefinition> fieldDefinitions) {
         Map<String, Boolean> expansionState = captureExpansionState();
@@ -81,7 +102,6 @@ public class SourceListController {
         for (var entry : byAuthor.entrySet()) {
             TreeItem<SourceTreeNode> authorItem = new TreeItem<>(new AuthorNode(entry.getKey()));
             authorItem.setExpanded(expansionState.getOrDefault(getExpansionKey(authorItem.getValue()), true));
-            authorItem.setExpanded(true);
             entry.getValue().stream()
                     .sorted(Comparator.comparing(Source::title))
                     .forEach(source -> authorItem.getChildren().add(buildTitleItem(source, fieldDefinitions, expansionState)));
@@ -146,6 +166,35 @@ public class SourceListController {
         }, ignored -> loadAll());
     }
 
+    private void deleteSource(Source source) {
+        runAsync(() -> sourceRepo.countCitingSnippets(source.id(), projectId),
+                citing -> confirmAndDeleteSource(source, citing));
+    }
+
+    private void confirmAndDeleteSource(Source source, int citingSnippets) {
+        int otherProjects = source.projectIds().size() - 1;
+        boolean isOnlyProject = otherProjects == 0;
+
+        String consequence = isOnlyProject
+                ? "This source is only used in this project, and will therefore be DELETED PERMANENTLY."
+                : "This source is also used in " + otherProjects + " other project(s). "
+                + "It will be PERMANENTLY DELETED only from this project.";
+        if (citingSnippets > 0) {
+            consequence += "\n" + citingSnippets + " snippet(s) in this project cite it and will be left without a source.";
+        }
+
+        String description = source.title()
+                + (source.author() != null ? "\n— " + source.author() : "");
+        if (!ConfirmDeleteDialog.confirm(sourceTree.getScene().getWindow(),
+                "source", description, consequence)) return;
+
+        runAsync(() -> {
+                    if (isOnlyProject) sourceRepo.delete(source.id());
+                    else sourceRepo.unlinkProject(source.id(), projectId);
+                    return null;
+                },
+                ignored -> loadAll());
+    }
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
         Task<T> task = new Task<>() {

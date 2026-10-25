@@ -1,5 +1,6 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
+import ch.muhmenthaler.valdb.business.SourceService;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
 import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.CustomFieldValue;

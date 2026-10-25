@@ -15,22 +15,42 @@ import java.util.function.Consumer;
 
 class SourceTreeCell extends TreeCell<SourceTreeNode> {
     private final TextField editField = new TextField();
-    private final ContextMenu renameMenu = new ContextMenu();
+    private final ContextMenu titleMenu = new ContextMenu();
+    private final ContextMenu fieldMenu = new ContextMenu();
     private final Consumer<SourceTreeNode> onCommit;
+    private final Consumer<Source> onDelete;
+
     private boolean editingInPlace = false;
 
-    SourceTreeCell(Consumer<SourceTreeNode> onCommit) {
+    SourceTreeCell(Consumer<SourceTreeNode> onCommit, Consumer<Source> onDelete) {
         this.onCommit = onCommit;
+        this.onDelete = onDelete;
 
         editField.setOnAction(e -> commitInPlaceEdit());
         editField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) cancelInPlaceEdit();
         });
 
-        MenuItem renameItem = new MenuItem("Rename");
-        renameItem.setOnAction(e -> startInPlaceEdit());
-        renameMenu.getItems().add(renameItem);
+        MenuItem deleteItem = new MenuItem("Delete source…");
+        deleteItem.setOnAction(e -> {
+            if (getItem() instanceof TitleNode t) onDelete.accept(t.source());
+        });
+        titleMenu.getItems().addAll(renameItem(), deleteItem);
+        fieldMenu.getItems().add(renameItem());
     }
+
+    private MenuItem renameItem() {
+        MenuItem item = new MenuItem("Rename");
+        item.setOnAction(e -> startInPlaceEdit());
+        return item;
+    }
+
+    private ContextMenu menuFor(SourceTreeNode node) {
+        if (node instanceof TitleNode) return titleMenu;
+        if (node instanceof GenreNode || node instanceof CustomFieldNode) return fieldMenu;
+        return null;
+    }
+
 
     private void startInPlaceEdit() {
         if (!isEditableNode(getItem())) return;
@@ -75,7 +95,7 @@ class SourceTreeCell extends TreeCell<SourceTreeNode> {
         } else {
             setText(item.label());
             setGraphic(null);
-            setContextMenu(isEditableNode(item) ? renameMenu : null);
+            setContextMenu(menuFor(item));
         }
     }
 

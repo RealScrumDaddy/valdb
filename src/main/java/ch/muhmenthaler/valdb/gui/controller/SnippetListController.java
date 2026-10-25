@@ -1,6 +1,6 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
-import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.business.SourceService;
 import ch.muhmenthaler.valdb.gui.dialog.ConfirmDeleteDialog;
 import ch.muhmenthaler.valdb.gui.dialog.SnippetDialog;
 import ch.muhmenthaler.valdb.gui.form.SnippetForm;
@@ -44,6 +44,7 @@ public class SnippetListController {
     private final TagRepository tagRepo = new TagRepository();
     private final FieldDefinitionRepository sourceFieldDefinitionRepo = new FieldDefinitionRepository();
     private final ObservableList<Snippet> items = FXCollections.observableArrayList();
+    private final SourceService sourceService = new SourceService();
 
     private Integer projectId;
     private ChapterFilterBinding chapterFilterBinding;
@@ -243,29 +244,11 @@ public class SnippetListController {
     }
 
     private Integer resolveSourceId(SnippetForm.Input input) throws SQLException {
-        if (input.existingSourceId() != null) {
-            return input.existingSourceId();
-        }
-        AddSourceDialog.Input newSource = input.newSource();
-        if (newSource == null) {
-            return null;
-        }
-        int newSourceId = sourceRepo.insert(
-                List.of(projectId),
-                newSource.title(),
-                newSource.author(),
-                newSource.genre()
-        );
-        for (var entry : newSource.customFieldValues().entrySet()) {
-            sourceRepo.setFieldValue(newSourceId, entry.getKey(), entry.getValue());
-        }
-        int nextSortOrder = sourceFieldDefinitions.size();
-        for (AddSourceDialog.NewCustomField field : newSource.newCustomFields()) {
-            int fieldDefId = sourceFieldDefinitionRepo.insert(projectId, "source", field.name(), nextSortOrder++);
-            sourceRepo.setFieldValue(newSourceId, fieldDefId, field.value());
-        }
-        return newSourceId;
+        if (input.existingSourceId() != null) return input.existingSourceId();
+        if (input.newSource() == null) return null;
+        return sourceService.create(projectId, input.newSource(), sourceFieldDefinitions.size());
     }
+
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
         Task<T> task = new Task<>() {

@@ -61,12 +61,57 @@ public class SourceRepository {
         }
     }
 
-    /** Caller is responsible for not removing a source's last remaining project link. */
-    public void unlinkProject(int sourceId, int projectId) throws SQLException {
-        String sql = "DELETE FROM source_projects WHERE source_id = ? AND project_id = ?";
+    public int countCitingSnippets(int sourceId, int projectId) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM snippets s "
+                + "JOIN snippet_projects sp ON sp.snippet_id = s.id "
+                + "WHERE s.source_id = ? AND sp.project_id = ?";
         try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
             ps.setInt(1, sourceId);
             ps.setInt(2, projectId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    /**
+     * Removes the source from the project: this project's snippets stop citing it and its values for
+     * this project's custom fields are removed. Refuses to remove the last project; use delete() for that.
+     */
+    public void unlinkProject(int sourceId, int projectId) throws SQLException {
+        Connection conn = Database.get();
+        boolean previousAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try {
+            executeUpdate(conn, "UPDATE snippets SET source_id = NULL WHERE source_id = ? "
+                    + "AND id IN (SELECT snippet_id FROM snippet_projects WHERE project_id = ?)", sourceId, projectId);
+            executeUpdate(conn, "DELETE FROM source_field_values WHERE source_id = ? "
+                    + "AND field_definition_id IN (SELECT id FROM field_definitions WHERE project_id = ?)", sourceId, projectId);
+            executeUpdate(conn, "DELETE FROM source_projects WHERE source_id = ? AND project_id = ?", sourceId, projectId);
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT EXISTS (SELECT 1 FROM source_projects WHERE source_id = ?)")) {
+                ps.setInt(1, sourceId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    if (!rs.getBoolean(1)) {
+                        throw new SQLException("Source " + sourceId + " would be left without a project");
+                    }
+                }
+            }
+            conn.commit();
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(previousAutoCommit);
+        }
+    }
+
+    private static void executeUpdate(Connection conn, String sql, int... params) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) ps.setInt(i + 1, params[i]);
             ps.executeUpdate();
         }
     }
