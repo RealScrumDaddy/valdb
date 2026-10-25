@@ -1,6 +1,7 @@
 package ch.muhmenthaler.valdb.gui.controller;
 
 import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.gui.dialog.ConfirmDeleteDialog;
 import ch.muhmenthaler.valdb.gui.dialog.SnippetDialog;
 import ch.muhmenthaler.valdb.gui.form.SnippetForm;
 import ch.muhmenthaler.valdb.gui.input.ChapterFilterBinding;
@@ -101,7 +102,9 @@ public class SnippetListController {
 
             MenuItem editItem = new MenuItem("Edit snippet…");
             editItem.setOnAction(e -> editSnippet(row.getItem()));
-            ContextMenu menu = new ContextMenu(editItem);
+            MenuItem deleteItem = new MenuItem("Delete snippet…");
+            deleteItem.setOnAction(e -> deleteSnippet(row.getItem()));
+            ContextMenu menu = new ContextMenu(editItem, deleteItem);
             row.contextMenuProperty().bind(
                     Bindings.when(row.emptyProperty()).then((ContextMenu) null).otherwise(menu));
 
@@ -191,6 +194,37 @@ public class SnippetListController {
     private void editSnippet(Snippet snippet) {
         SnippetDialog.showEdit(snippet, chapters, tags, sources, sourceFieldDefinitions)
                 .ifPresent(input -> saveEdit(snippet.id(), input));
+    }
+
+    private void deleteSnippet(Snippet snippet) {
+        int otherProjects = snippet.projectIds().size() - 1;
+        boolean isOnlyProject = otherProjects == 0;
+
+        String consequence = isOnlyProject
+                ? "This snippet is only used in this project, and will therefore be DELETED PERMANENTLY."
+                : "This snippet is also used in " + otherProjects + " other project(s). "
+                + "It will be PERMANENTLY DELETED only from this project.";
+
+        String headerKind = isOnlyProject ? "snippet" : "snippet from this project";
+
+        if (!ConfirmDeleteDialog.confirm(snippetTable.getScene().getWindow(),
+                headerKind, describe(snippet), consequence)) return;
+
+        runAsync(() -> {
+                    if (isOnlyProject) snippetRepo.delete(snippet.id());
+                    else snippetRepo.unlinkProject(snippet.id(), projectId);
+                    return null;
+                },
+                ignored -> loadAll());
+    }
+
+    private String describe(Snippet snippet) {
+        String originalText = Objects.requireNonNullElse(snippet.originalContent(), "");
+        if (originalText.length() > 80) originalText = originalText.substring(0, 80) + "…";
+        String translationText = Objects.requireNonNullElse(snippet.translationContent(), "");
+        if (translationText.length() > 80) translationText = translationText.substring(0, 80) + "…";
+        String source = snippet.source() != null ? snippet.source().title() : "no source";
+        return "“" + originalText + "”\n" + "“" + translationText + "”\n— "+ source;
     }
 
     private void saveEdit(int snippetId, SnippetForm.Input input) {

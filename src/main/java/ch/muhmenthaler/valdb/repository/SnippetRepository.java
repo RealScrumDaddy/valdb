@@ -63,16 +63,6 @@ public class SnippetRepository {
         }
     }
 
-    /** Caller is responsible for not removing a snippet's last remaining project link. */
-    public void unlinkProject(int snippetId, int projectId) throws SQLException {
-        String sql = "DELETE FROM snippet_projects WHERE snippet_id = ? AND project_id = ?";
-        try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
-            ps.setInt(1, snippetId);
-            ps.setInt(2, projectId);
-            ps.executeUpdate();
-        }
-    }
-
     public void linkChapter(int snippetId, int chapterId) throws SQLException {
         String sql = "INSERT OR IGNORE INTO snippet_chapters (snippet_id, chapter_id) VALUES (?, ?)";
         try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
@@ -341,6 +331,56 @@ public class SnippetRepository {
 
     public void setTags(int snippetId, Collection<Integer> tagIds) throws SQLException {
         replaceLinks("snippet_tags", "tag_id", snippetId, tagIds);
+    }
+
+    public void delete(int snippetId) throws SQLException {
+        try (PreparedStatement ps = Database.get().prepareStatement("DELETE FROM snippets WHERE id = ?")) {
+            ps.setInt(1, snippetId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Removes the snippet from the project, along with its chapters, tags and field values from that project.
+     * Refuses to remove the snippet's last project; use delete() for that.
+     */
+    public void unlinkProject(int snippetId, int projectId) throws SQLException {
+        Connection conn = Database.get();
+        boolean previousAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try {
+            executeUpdate(conn, "DELETE FROM snippet_chapters WHERE snippet_id = ? "
+                    + "AND chapter_id IN (SELECT id FROM chapters WHERE project_id = ?)", snippetId, projectId);
+            executeUpdate(conn, "DELETE FROM snippet_tags WHERE snippet_id = ? "
+                    + "AND tag_id IN (SELECT id FROM tags WHERE project_id = ?)", snippetId, projectId);
+            executeUpdate(conn, "DELETE FROM snippet_field_values WHERE snippet_id = ? "
+                    + "AND field_definition_id IN (SELECT id FROM field_definitions WHERE project_id = ?)", snippetId, projectId);
+            executeUpdate(conn, "DELETE FROM snippet_projects WHERE snippet_id = ? AND project_id = ?", snippetId, projectId);
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT EXISTS (SELECT 1 FROM snippet_projects WHERE snippet_id = ?)")) {
+                ps.setInt(1, snippetId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    if (!rs.getBoolean(1)) {
+                        throw new SQLException("Snippet " + snippetId + " would be left without a project");
+                    }
+                }
+            }
+            conn.commit();
+        } catch (SQLException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(previousAutoCommit);
+        }
+    }
+
+    private static void executeUpdate(Connection conn, String sql, int... params) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) ps.setInt(i + 1, params[i]);
+            ps.executeUpdate();
+        }
     }
 
     private void replaceLinks(String table, String column, int snippetId, Collection<Integer> ids) throws SQLException {
