@@ -32,6 +32,7 @@ public class SnippetForm extends GridPane {
             Integer verseEnd,
             Integer pageStart,
             Integer pageEnd,
+            String notes,
             List<Integer> chapterIds,
             List<String> newChapterTitles,
             List<Integer> tagIds,
@@ -54,6 +55,7 @@ public class SnippetForm extends GridPane {
     private final TagField chapterField;
     private final TagField tagField;
     private final TextFieldWithAutoComplete sourceField;
+    private final TextArea notesField = new TextArea();
 
     private final Map<String, Integer> sourceIdsByTitleLower;
     /** A brand-new source built via "New Source…", not saved yet. */
@@ -70,6 +72,7 @@ public class SnippetForm extends GridPane {
 
         originalField.setWrapText(true);
         translationField.setWrapText(true);
+        notesField.setWrapText(true);
         verseField.setPromptText("e.g. 12 or 57-65");
         pageField.setPromptText("e.g. 12 or 57-65");
 
@@ -135,6 +138,7 @@ public class SnippetForm extends GridPane {
         addRow(4, new Label("Chapters:"), chapterField);
         addRow(5, new Label("Tags:"), tagField);
         addRow(6, new Label("Source:"), sourceBox);
+        addRow(7, new Label("Notes:"), notesField);
 
         valid = originalField.textProperty().isEmpty().not().and(sourceValid).and(numbersValid);
     }
@@ -152,6 +156,7 @@ public class SnippetForm extends GridPane {
         pageField.setText(formatVerseOrPageRange(snippet.pageStart(), snippet.pageEnd()));
         chapterField.setTags(namesFor(snippet.chapterIds(), availableChapters, Chapter::id, Chapter::title));
         tagField.setTags(namesFor(snippet.tagIds(), availableTags, Tag::id, Tag::name));
+        notesField.setText(Objects.requireNonNullElse(snippet.notesContent(), ""));
 
         pendingNewSource.set(null);
         prefilledSource = snippet.source(); // set before the text, so validation already knows it
@@ -187,11 +192,12 @@ public class SnippetForm extends GridPane {
 
         return new Input(
                 originalField.getText(),
-                translationField.getText(),
+                blankToNull(translationField.getText()),
                 verse.start(),
                 verse.end(),
                 page.start(),
                 page.end(),
+                blankToNull(notesField.getText()),
                 chapterIds,
                 newChapterTitles,
                 tagIds,
@@ -204,6 +210,10 @@ public class SnippetForm extends GridPane {
     private boolean isPendingNewSource(String text) {
         AddSourceDialog.Input pending = pendingNewSource.get();
         return pending != null && pending.title().equals(text);
+    }
+
+    private String blankToNull(String s){
+        return (s == null || s.isBlank()) ? null : s;
     }
 
     private boolean isPrefilledSource(String text) {

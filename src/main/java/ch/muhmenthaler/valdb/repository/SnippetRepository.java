@@ -10,7 +10,7 @@ import java.util.*;
 public class SnippetRepository {
 
     public int insert(List<Integer> projectIds, Integer sourceId, String original, String translation,
-                      Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd) throws SQLException {
+                      Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd, String notes) throws SQLException {
         if (projectIds == null || projectIds.isEmpty()) {
             throw new IllegalArgumentException("A snippet must belong to at least one project");
         }
@@ -19,8 +19,8 @@ public class SnippetRepository {
         conn.setAutoCommit(false);
         try {
             int snippetId;
-            String sql = "INSERT INTO snippets (source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)";
+            String sql = "INSERT INTO snippets (source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end, notes_content) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 if (sourceId != null) ps.setInt(1, sourceId); else ps.setNull(1, Types.INTEGER);
                 ps.setString(2, original);
@@ -29,6 +29,7 @@ public class SnippetRepository {
                 if (verseEnd != null) ps.setInt(5, verseEnd); else ps.setNull(5, Types.INTEGER);
                 if (pageStart != null) ps.setInt(6, pageStart); else ps.setNull(6, Types.INTEGER);
                 if (pageEnd != null) ps.setInt(7, pageEnd); else ps.setNull(7, Types.INTEGER);
+                ps.setString(8, notes);
                 ps.executeUpdate();
                 try (ResultSet keys = ps.getGeneratedKeys()) {
                     keys.next();
@@ -128,17 +129,49 @@ public class SnippetRepository {
         }
     }
 
-    /** Full-text search across original + translation content, ranked by relevance. */
-    public List<Integer> search(String query) throws SQLException {
-        String sql = "SELECT rowid FROM snippets_fts WHERE snippets_fts MATCH ? ORDER BY rank";
-        try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
-            ps.setString(1, query);
+    /** Full-text search within one project, optionally limited to one chapter, ranked by relevance. */
+    public List<Integer> search(int projectId, Integer chapterId, String userText) throws SQLException {
+        String ftsQuery = toFtsQuery(userText);
+        if (ftsQuery == null) return List.of();
+        StringBuilder sql = new StringBuilder("""
+            SELECT snippets_fts.rowid FROM snippets_fts
+            WHERE snippets_fts MATCH ?
+              AND EXISTS (SELECT 1 FROM snippet_projects sp
+                          WHERE sp.snippet_id = snippets_fts.rowid AND sp.project_id = ?)
+            """);
+        if (chapterId != null) {
+            sql.append("""
+                  AND EXISTS (SELECT 1 FROM snippet_chapters sc
+                              WHERE sc.snippet_id = snippets_fts.rowid AND sc.chapter_id = ?)
+                """);
+        }
+        sql.append("ORDER BY rank");
+
+        try (PreparedStatement ps = Database.get().prepareStatement(sql.toString())) {
+            ps.setString(1, ftsQuery);
+            ps.setInt(2, projectId);
+            if (chapterId != null) ps.setInt(3, chapterId);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Integer> ids = new ArrayList<>();
                 while (rs.next()) ids.add(rs.getInt(1));
                 return ids;
             }
         }
+    }
+
+    /**
+     * Turns free text into a safe FTS5 query: every word is quoted, so FTS5 operators typed by the user
+     * (-, :, *, AND, quotes, …) are treated as plain text. The last word matches as a prefix.
+     * Returns null if nothing searchable is left.
+     */
+    private static String toFtsQuery(String userText) {
+        if (userText == null) return null;
+        List<String> terms = Arrays.stream(userText.trim().split("\\s+"))
+                .filter(t -> t.codePoints().anyMatch(Character::isLetterOrDigit))
+                .map(t -> "\"" + t.replace("\"", "\"\"") + "\"")
+                .toList();
+        if (terms.isEmpty()) return null;
+        return String.join(" ", terms) + "*";
     }
 
     /** Any of projectId, chapterId, tagId may be null to skip that condition. */
@@ -181,8 +214,9 @@ public class SnippetRepository {
         Map<Integer, Integer> verseEnds = new HashMap<>();
         Map<Integer, Integer> pageStarts = new HashMap<>();
         Map<Integer, Integer> pageEnds = new HashMap<>();
+        Map<Integer, String> notes = new HashMap<>();
 
-        String snippetSql = "SELECT id, source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end " +
+        String snippetSql = "SELECT id, source_id, original_content, translation_content, verse_start, verse_end, page_start, page_end, notes_content " +
                 "FROM snippets WHERE id IN (" + placeholders + ")";
         try (PreparedStatement ps = Database.get().prepareStatement(snippetSql)) {
             for (int i = 0; i < ids.size(); i++) ps.setInt(i + 1, ids.get(i));
@@ -206,6 +240,8 @@ public class SnippetRepository {
 
                     int pageEnd = rs.getInt("page_end");
                     if (!rs.wasNull()) pageEnds.put(id, pageEnd);
+
+                    notes.put(id, rs.getString("notes_content"));
                 }
             }
         }
@@ -295,11 +331,15 @@ public class SnippetRepository {
                     verseEnds.get(id),
                     pageStarts.get(id),
                     pageEnds.get(id),
+                    notes.get(id),
                     chaptersBySnippet.get(id),
                     tagsBySnippet.get(id),
                     fieldsBySnippet.get(id)
             ));
         }
+        Map<Integer, Integer> position = new HashMap<>();
+        for (int i = 0; i < ids.size(); i++) position.putIfAbsent(ids.get(i), i);
+        snippets.sort(Comparator.comparingInt(s -> position.get(s.id())));
         return snippets;
     }
 
@@ -309,9 +349,9 @@ public class SnippetRepository {
     }
 
     public void update(int snippetId, Integer sourceId, String original, String translation,
-                       Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd) throws SQLException {
+                       Integer verseStart, Integer verseEnd, Integer pageStart, Integer pageEnd, String notes) throws SQLException {
         String sql = "UPDATE snippets SET source_id = ?, original_content = ?, translation_content = ?, "
-                + "verse_start = ?, verse_end = ?, page_start = ?, page_end = ? WHERE id = ?";
+                + "verse_start = ?, verse_end = ?, page_start = ?, page_end = ?, notes_content = ? WHERE id = ?";
         try (PreparedStatement ps = Database.get().prepareStatement(sql)) {
             setNullableInt(ps, 1, sourceId);
             ps.setString(2, original);
@@ -320,7 +360,8 @@ public class SnippetRepository {
             setNullableInt(ps, 5, verseEnd);
             setNullableInt(ps, 6, pageStart);
             setNullableInt(ps, 7, pageEnd);
-            ps.setInt(8, snippetId);
+            ps.setString(8, notes);
+            ps.setInt(9, snippetId);
             ps.executeUpdate();
         }
     }

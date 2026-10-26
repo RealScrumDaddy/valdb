@@ -35,6 +35,7 @@ public class SnippetListController {
     @FXML private TableColumn<Snippet, String> pageColumn;
     @FXML private TableColumn<Snippet, String> chapterColumn;
     @FXML private TableColumn<Snippet, List<Tag>> tagsColumn;
+    @FXML private TableColumn<Snippet, String> notesColumn;
     @FXML private TextField searchField;
     @FXML private ComboBox<Chapter> chapterFilter;
 
@@ -96,8 +97,9 @@ public class SnippetListController {
                         .filter(Objects::nonNull)
                         .toList()));
         tagsColumn.setCellFactory(col -> new TagPillCell<>());
+        notesColumn.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().notesContent()));
         snippetTable.setItems(items);
-        chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::loadAll);
+        chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::refresh);
         snippetTable.setRowFactory(table -> {
             TableRow<Snippet> row = new TableRow<>();
 
@@ -163,17 +165,12 @@ public class SnippetListController {
     private void onSearch() {
         String query = searchField.getText();
         if (query == null || query.isBlank()) { loadAll(); return; }
+        Chapter selected = chapterFilterBinding.getSelectedChapter();
+        Integer chapterId = selected == null ? null : selected.id();
         runAsync(
-                () -> snippetRepo.loadByIds(filterToProject(snippetRepo.search(query + "*"))),
+                () -> snippetRepo.loadByIds(snippetRepo.search(projectId, chapterId, query)),
                 items::setAll
         );
-    }
-
-    /** snippets_fts has no project column, so full-text search results need filtering after the fact. */
-    private List<Integer> filterToProject(List<Integer> searchIds) throws SQLException {
-        if (searchIds.isEmpty()) return searchIds;
-        List<Integer> projectSnippetIds = snippetRepo.filter(projectId, null, null);
-        return searchIds.stream().filter(projectSnippetIds::contains).toList();
     }
 
     @FXML
@@ -183,7 +180,7 @@ public class SnippetListController {
                     ResolvedReferences refs = resolveReferences(input);
                     int snippetId = snippetRepo.insert(List.of(projectId), refs.sourceId(),
                             input.original(), input.translation(),
-                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd());
+                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd(), input.notes());
                     snippetRepo.setChapters(snippetId, refs.chapterIds());
                     snippetRepo.setTags(snippetId, refs.tagIds());
                     return snippetId;
@@ -234,7 +231,7 @@ public class SnippetListController {
                     ResolvedReferences refs = resolveReferences(input);
                     snippetRepo.update(snippetId, refs.sourceId(),
                             input.original(), input.translation(),
-                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd());
+                            input.verseStart(), input.verseEnd(), input.pageStart(), input.pageEnd(), input.notes());
                     snippetRepo.setChapters(snippetId, refs.chapterIds());
                     snippetRepo.setTags(snippetId, refs.tagIds());
                     return null;
@@ -249,6 +246,11 @@ public class SnippetListController {
         return sourceService.create(projectId, input.newSource(), sourceFieldDefinitions.size());
     }
 
+    private void refresh() {
+        String query = searchField.getText();
+        if (query == null || query.isBlank()) loadAll();
+        else onSearch();
+    }
 
     private <T> void runAsync(Callable<T> work, Consumer<T> onSuccess) {
         Task<T> task = new Task<>() {

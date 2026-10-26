@@ -24,6 +24,7 @@
                 <TableColumn fx:id="sourceColumn" text="Source"/>
                 <TableColumn fx:id="chapterColumn" text="Chapter"/>
                 <TableColumn fx:id="tagsColumn" text="Tags"/>
+                <TableColumn fx:id="notesColumn" text="Notes"/>
             </columns>
         </TableView>
     </center>

@@ -13,6 +13,7 @@ public record Snippet(
         Integer verseEnd,         // null unless the citation is a range, e.g. 57-65
         Integer pageStart,        // null if not applicable
         Integer pageEnd,          // null unless the citation is a range, e.g.  57-65
+        String notesContent,
         List<Integer> chapterIds,
         List<Integer> tagIds,
         Map<String, String> customFields
