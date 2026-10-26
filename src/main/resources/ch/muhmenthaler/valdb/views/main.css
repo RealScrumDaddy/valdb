@@ -13,6 +13,11 @@
     -fx-padding: 10 14 10 14;
 }
 
+.resize-handle:hover {
+    -fx-background-color: -fx-accent;
+    -fx-opacity: 0.5;
+}
+
 .project-card-label {
     -fx-font-size: 13px;
 }

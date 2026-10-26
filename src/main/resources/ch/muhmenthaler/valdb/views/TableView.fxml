@@ -4,28 +4,43 @@
 
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
-            fx:controller="ch.muhmenthaler.valdb.gui.controller.SnippetListController">
+            fx:controller="ch.muhmenthaler.valdb.gui.controller.SnippetListController"
+            stylesheets="/ch/muhmenthaler/valdb/views/tagfield.css">
     <top>
-        <HBox spacing="8" style="-fx-padding: 8;">
+        <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 8;">
             <Button text="Add Snippet" onAction="#onAddSnippet"/>
             <TextField fx:id="searchField" promptText="Search..."/>
             <Button text="Search" onAction="#onSearch"/>
             <Label text="Chapter:"/>
             <ComboBox fx:id="chapterFilter"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <ToggleButton fx:id="detailToggle" text="Details"/>
         </HBox>
     </top>
     <center>
-        <TableView fx:id="snippetTable">
-            <columns>
-                <TableColumn fx:id="verseColumn" text="Verse"/>
-                <TableColumn fx:id="pageColumn" text="Page"/>
-                <TableColumn fx:id="originalColumn" text="Original"/>
-                <TableColumn fx:id="translationColumn" text="Translation"/>
-                <TableColumn fx:id="sourceColumn" text="Source"/>
-                <TableColumn fx:id="chapterColumn" text="Chapter"/>
-                <TableColumn fx:id="tagsColumn" text="Tags"/>
-                <TableColumn fx:id="notesColumn" text="Notes"/>
-            </columns>
-        </TableView>
+        <SplitPane fx:id="splitPane">
+            <TableView fx:id="snippetTable">
+                <columns>
+
+                    <TableColumn fx:id="verseColumn" text="Verse"/>
+                    <TableColumn fx:id="pageColumn" text="Page"/>
+                    <TableColumn fx:id="originalColumn" text="Original"/>
+                    <TableColumn fx:id="translationColumn" text="Translation"/>
+                    <TableColumn fx:id="sourceColumn" text="Source"/>
+                    <TableColumn fx:id="chapterColumn" text="Chapter"/>
+                    <TableColumn fx:id="tagsColumn" text="Tags"/>
+                    <TableColumn fx:id="notesColumn" text="Notes"/>
+               </columns>
+            </TableView>
+
+            <VBox fx:id="detailPane" minWidth="250">
+                <HBox alignment="CENTER_LEFT" spacing="6" style="-fx-padding: 4 8 4 8;">
+                    <Label text="Details" style="-fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="✕" onAction="#onCloseDetail"/>
+                </HBox>
+                <ScrollPane fx:id="detailScroll" fitToWidth="true" VBox.vgrow="ALWAYS"/>
+            </VBox>
+        </SplitPane>
     </center>
 </BorderPane>

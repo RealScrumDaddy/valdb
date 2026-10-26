@@ -18,6 +18,7 @@ import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseButton;
+import javafx.scene.layout.VBox;
 
 import java.sql.SQLException;
 import java.util.*;
@@ -38,6 +39,10 @@ public class SnippetListController {
     @FXML private TableColumn<Snippet, String> notesColumn;
     @FXML private TextField searchField;
     @FXML private ComboBox<Chapter> chapterFilter;
+    @FXML private SplitPane splitPane;
+    @FXML private VBox detailPane;
+    @FXML private ScrollPane detailScroll;
+    @FXML private ToggleButton detailToggle;
 
     private final SnippetRepository snippetRepo = new SnippetRepository();
     private final SourceRepository sourceRepo = new SourceRepository();
@@ -47,6 +52,8 @@ public class SnippetListController {
     private final ObservableList<Snippet> items = FXCollections.observableArrayList();
     private final SourceService sourceService = new SourceService();
 
+    private final Label detailPlaceholder = new Label("Select a snippet to see its details.");
+    private double lastDividerPosition = 0.65;
     private Integer projectId;
     private ChapterFilterBinding chapterFilterBinding;
     private Map<Integer, Chapter> chaptersById = Map.of();
@@ -61,8 +68,8 @@ public class SnippetListController {
 
     @FXML
     public void initialize() {
-        originalColumn.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().originalContent()));
-        translationColumn.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().translationContent()));
+        originalColumn.setCellValueFactory(c -> new SimpleStringProperty(singleLine(c.getValue().originalContent())));
+        translationColumn.setCellValueFactory(c -> new SimpleStringProperty(singleLine(c.getValue().translationContent())));
         sourceColumn.setCellValueFactory(c -> {
             var source = c.getValue().source();
             return new SimpleStringProperty(source != null ? source.title() : "");
@@ -97,7 +104,7 @@ public class SnippetListController {
                         .filter(Objects::nonNull)
                         .toList()));
         tagsColumn.setCellFactory(col -> new TagPillCell<>());
-        notesColumn.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().notesContent()));
+        notesColumn.setCellValueFactory(c -> new SimpleStringProperty(singleLine(c.getValue().notesContent())));
         snippetTable.setItems(items);
         chapterFilterBinding = new ChapterFilterBinding(chapterFilter, this::refresh);
         snippetTable.setRowFactory(table -> {
@@ -113,11 +120,17 @@ public class SnippetListController {
 
             row.setOnMouseClicked(e -> {
                 if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2 && !row.isEmpty()) {
-                    editSnippet(row.getItem());
+                    detailToggle.setSelected(true);
                 }
             });
             return row;
         });
+        SplitPane.setResizableWithParent(detailPane, false);
+        splitPane.getItems().remove(detailPane);
+        detailToggle.selectedProperty().addListener((obs, wasOpen, open) -> setDetailOpen(open));
+        showDetail(null);
+        snippetTable.getSelectionModel().selectedItemProperty()
+            .addListener((obs, oldSel, newSel) -> showDetail(newSel));
     }
 
     /** Must be called once, right after this controller is loaded, before any data can show. */
@@ -129,6 +142,38 @@ public class SnippetListController {
                     chapterFilterBinding.setChapters(chapters);
                     loadAll();
         });
+    }
+
+    private void showDetail(Snippet snippet) {
+        if (snippet == null) {
+            detailScroll.setContent(detailPlaceholder);
+            return;
+        }
+        SnippetForm form = new SnippetForm(chapters, tags, sources, sourceFieldDefinitions);
+        form.setSnippet(snippet);
+        form.setReadOnly(true);
+        detailScroll.setContent(form);
+    }
+
+    private void setDetailOpen(boolean open) {
+        boolean isOpen = splitPane.getItems().contains(detailPane);
+        if (open && !isOpen) {
+            splitPane.getItems().add(detailPane);
+            splitPane.setDividerPositions(lastDividerPosition);
+        } else if (!open && isOpen) {
+            lastDividerPosition = splitPane.getDividerPositions()[0];
+            splitPane.getItems().remove(detailPane);
+        }
+    }
+
+    @FXML
+    private void onCloseDetail() {
+        detailToggle.setSelected(false);
+    }
+
+    /** For table display only: joins all lines into one, so a row never grows taller. */
+    private static String singleLine(String text) {
+        return text == null ? "" : text.strip().replaceAll("\\s*\\R\\s*", " / ");
     }
 
     private record LoadResult(List<Snippet> snippets, List<Chapter> chapters, List<Tag> tags, List<Source> sources, List<FieldDefinition> sourceFieldDefinitions) {}
@@ -156,7 +201,15 @@ public class SnippetListController {
                     for (FieldDefinition sourceFieldDef : sourceFieldDefinitions) sourceFieldDefinitionsById.put(sourceFieldDef.id(), sourceFieldDef.name());
                     tagsById = new HashMap<>();
                     for (Tag tag : tags) tagsById.put(tag.id(), tag);
+                    Snippet previous = snippetTable.getSelectionModel().getSelectedItem();
+                    Integer previousId = previous == null ? null : previous.id();
+
                     items.setAll(result.snippets());
+
+                    if (previousId != null) {
+                        items.stream().filter(s -> s.id() == previousId).findFirst()
+                                .ifPresent(s -> snippetTable.getSelectionModel().select(s));
+                    }
                 }
         );
     }

@@ -1,6 +1,7 @@
 package ch.muhmenthaler.valdb.gui.form;
 
 import ch.muhmenthaler.valdb.gui.dialog.AddSourceDialog;
+import ch.muhmenthaler.valdb.gui.input.ResizeHandle;
 import ch.muhmenthaler.valdb.gui.input.TagField;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
 import ch.muhmenthaler.valdb.model.Chapter;
@@ -14,10 +15,10 @@ import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.VPos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 
 import java.util.*;
 import java.util.function.Function;
@@ -56,6 +57,7 @@ public class SnippetForm extends GridPane {
     private final TagField tagField;
     private final TextFieldWithAutoComplete sourceField;
     private final TextArea notesField = new TextArea();
+    private final Button newSourceButton = new Button("New Source…");
 
     private final Map<String, Integer> sourceIdsByTitleLower;
     /** A brand-new source built via "New Source…", not saved yet. */
@@ -90,7 +92,6 @@ public class SnippetForm extends GridPane {
         sourceField = new TextFieldWithAutoComplete(availableSources.stream().map(Source::title).toList());
         sourceField.setPromptText("Existing source (leave blank for none)");
 
-        Button newSourceButton = new Button("New Source…");
         newSourceButton.setOnAction(e ->
                 AddSourceDialog.show(availableSources, sourceFieldDefinitions).ifPresent(newSource -> {
                     pendingNewSource.set(newSource);
@@ -130,15 +131,24 @@ public class SnippetForm extends GridPane {
 
         setHgap(8);
         setVgap(8);
+        ColumnConstraints labelColumn = new ColumnConstraints();
+        labelColumn.setMinWidth(Region.USE_PREF_SIZE);   // "Translation:" never gets cut off
+        ColumnConstraints fieldColumn = new ColumnConstraints();
+        fieldColumn.setHgrow(Priority.ALWAYS);           // fields take all remaining width
+        fieldColumn.setFillWidth(true);
+        getColumnConstraints().addAll(labelColumn, fieldColumn);
         setPadding(new Insets(8));
-        addRow(0, new Label("Original:"), originalField);
-        addRow(1, new Label("Translation:"), translationField);
+        addRow(0, new Label("Original:"), ResizeHandle.wrap(originalField));
+        addRow(1, new Label("Translation:"), ResizeHandle.wrap(translationField));
         addRow(2, new Label("Verse:"), verseField);
         addRow(3, new Label("Page:"), pageBox);
         addRow(4, new Label("Chapters:"), chapterField);
         addRow(5, new Label("Tags:"), tagField);
         addRow(6, new Label("Source:"), sourceBox);
-        addRow(7, new Label("Notes:"), notesField);
+        addRow(7, new Label("Notes:"), ResizeHandle.wrap(notesField));
+        for (Node child : getChildren()) {
+            if (child instanceof Label) GridPane.setValignment(child, VPos.TOP);
+        }
 
         valid = originalField.textProperty().isEmpty().not().and(sourceValid).and(numbersValid);
     }
@@ -218,6 +228,25 @@ public class SnippetForm extends GridPane {
 
     private boolean isPrefilledSource(String text) {
         return prefilledSource != null && prefilledSource.title().equals(text);
+    }
+
+    /** Read-only: the fields look normal and text stays selectable, but nothing can be changed. */
+    public void setReadOnly(boolean readOnly) {
+        originalField.setEditable(!readOnly);
+        translationField.setEditable(!readOnly);
+        notesField.setEditable(!readOnly);
+        verseField.setEditable(!readOnly);
+        pageField.setEditable(!readOnly);
+        sourceField.setEditable(!readOnly);
+
+        newSourceButton.setVisible(!readOnly);
+        newSourceButton.setManaged(!readOnly);
+
+        // TagField has no read-only mode (yet): block mouse and keyboard without greying it out
+        for (TagField field : List.of(chapterField, tagField)) {
+            field.setMouseTransparent(readOnly);
+            field.setFocusTraversable(!readOnly);
+        }
     }
 
     private static Label warningLabel(String text, BooleanBinding showWhen) {

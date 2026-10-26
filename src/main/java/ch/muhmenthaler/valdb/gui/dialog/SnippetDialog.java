@@ -6,6 +6,8 @@ import ch.muhmenthaler.valdb.model.*;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
+import javafx.scene.control.ScrollPane;
+import javafx.stage.Screen;
 
 import java.util.List;
 import java.util.Objects;
@@ -32,7 +34,12 @@ public class SnippetDialog {
         dialog.getDialogPane().getStylesheets().addAll(
                 Objects.requireNonNull(SnippetDialog.class.getResource("/ch/muhmenthaler/valdb/views/tagfield.css")).toExternalForm(),
                 Objects.requireNonNull(SnippetDialog.class.getResource("/ch/muhmenthaler/valdb/views/main.css")).toExternalForm());
-        dialog.getDialogPane().setContent(form);
+        ScrollPane scrollPane = new ScrollPane(form);
+        scrollPane.setFitToWidth(true);
+        dialog.getDialogPane().setContent(scrollPane);
+        dialog.setResizable(true);
+        double maxHeight = Screen.getPrimary().getVisualBounds().getHeight() * 0.8;
+        scrollPane.setMaxHeight(maxHeight);
 
         ButtonType confirm = new ButtonType(confirmText, ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(confirm, ButtonType.CANCEL);
