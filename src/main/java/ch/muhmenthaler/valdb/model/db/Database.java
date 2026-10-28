@@ -59,7 +59,8 @@ public class Database {
         if (current < 1) applyMigration(1, "/ch/muhmenthaler/valdb/model/db/migration/V1__init.sql");
         if (current < 2) applyMigration(2, "/ch/muhmenthaler/valdb/model/db/migration/V2__page_range.sql");
         if (current < 3) applyMigration(3, "/ch/muhmenthaler/valdb/model/db/migration/V3__snippet_notes.sql");
-        // if (current < 4) applyMigration(4, ".../V4__something.sql");
+        if (current < 4) applyMigration(4, "/ch/muhmenthaler/valdb/model/db/migration/V4__tag_cleanup.sql");
+        //if (current < 5) applyMigration(5, "/ch/muhmenthaler/valdb/model/db/migration/V5__something.sql");
     }
 
     private static void applyMigration(int version, String resourcePath) throws SQLException {
