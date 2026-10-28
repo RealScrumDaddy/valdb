@@ -3,11 +3,13 @@ package ch.muhmenthaler.valdb.gui.dialog;
 import ch.muhmenthaler.valdb.gui.form.SnippetForm;
 import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.*;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.ScrollPane;
 import javafx.stage.Screen;
+import javafx.stage.Window;
 
 import java.util.List;
 import java.util.Objects;
@@ -38,8 +40,7 @@ public class SnippetDialog {
         scrollPane.setFitToWidth(true);
         dialog.getDialogPane().setContent(scrollPane);
         dialog.setResizable(true);
-        double maxHeight = Screen.getPrimary().getVisualBounds().getHeight() * 0.8;
-        scrollPane.setMaxHeight(maxHeight);
+        dialog.getDialogPane().setPrefSize(700, 600);
 
         ButtonType confirm = new ButtonType(confirmText, ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(confirm, ButtonType.CANCEL);

@@ -75,6 +75,11 @@ public class SnippetForm extends GridPane {
         originalField.setWrapText(true);
         translationField.setWrapText(true);
         notesField.setWrapText(true);
+
+        originalField.setPrefRowCount(4);
+        translationField.setPrefRowCount(4);
+        notesField.setPrefRowCount(3);
+
         verseField.setPromptText("e.g. 12 or 57-65");
         pageField.setPromptText("e.g. 12 or 57-65");
 

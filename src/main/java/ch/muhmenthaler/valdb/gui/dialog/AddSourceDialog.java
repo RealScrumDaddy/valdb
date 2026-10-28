@@ -1,6 +1,5 @@
 package ch.muhmenthaler.valdb.gui.dialog;
 
-import ch.muhmenthaler.valdb.business.SourceService;
 import ch.muhmenthaler.valdb.gui.input.TextFieldWithAutoComplete;
 import ch.muhmenthaler.valdb.gui.settings.UiSettings;
 import ch.muhmenthaler.valdb.model.CustomFieldValue;
@@ -13,7 +12,6 @@ import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.stage.Window;
 
 import java.util.*;
 import java.util.function.Function;
@@ -64,6 +62,8 @@ public class AddSourceDialog {
         grid.setHgap(8);
         grid.setVgap(8);
         grid.setPadding(new Insets(8));
+        ScrollPane scrollPane = new ScrollPane(grid);
+        scrollPane.setFitToWidth(true);
         grid.addRow(0, new Label("Title:"), titleField);
         grid.addRow(1, new Label("Author:"), authorField);
         grid.addRow(2, new Label("Genre:"), genreField);
@@ -119,14 +119,13 @@ public class AddSourceDialog {
                 newFieldsContainer.getChildren().remove(rowBox);
                 newFieldRows.remove(rowData);
                 revalidateNewFields.run();
-                resizeToFitContent(dialog);
             });
             nameField.textProperty().addListener((obs, oldV, newV) -> revalidateNewFields.run());
             valueField.textProperty().addListener((obs, oldV, newV) -> revalidateNewFields.run());
 
             newFieldRows.add(rowData);
             newFieldsContainer.getChildren().add(rowBox);
-            resizeToFitContent(dialog);
+            Platform.runLater(() -> scrollPane.setVvalue(1.0));   // show the row that was just added
         });
 
         Label newFieldsWarningLabel = new Label("Give each new field a name before it can be saved.");
@@ -138,7 +137,9 @@ public class AddSourceDialog {
         VBox newFieldsSection = new VBox(6, newFieldsContainer, addFieldButton, newFieldsWarningLabel);
         grid.addRow(row++, new Label("New fields:"), newFieldsSection);
 
-        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().setContent(scrollPane);
+        dialog.getDialogPane().setPrefSize(550, 450);
+        dialog.setResizable(true);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         var okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.disableProperty().bind(titleField.textProperty().isEmpty().or(newFieldsValid.not()));
@@ -202,19 +203,5 @@ public class AddSourceDialog {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
-    }
-
-    /**
-     * Re-measures the dialog's preferred size and grows the window to fit, so rows added/removed
-     * after the dialog is already showing don't get clipped. Deferred via runLater because the
-     * scene graph hasn't recomputed layout for the just-added/removed node yet on this call.
-     */
-    private static void resizeToFitContent(Dialog<?> dialog) {
-        Platform.runLater(() -> {
-            Window window = dialog.getDialogPane().getScene().getWindow();
-            if (window != null) {
-                window.sizeToScene();
-            }
-        });
     }
 }
